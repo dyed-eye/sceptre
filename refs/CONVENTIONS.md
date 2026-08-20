@@ -93,3 +93,20 @@ the dimension of the transverse field space — the modal basis is complete at e
 ## Units
 
 SI throughout the public API: meters, Hz (frequency f; ω = 2πf), dimensionless ε.
+
+## ASR (adaptive spatial resolution)
+
+With Solver(..., asr=AsrConfig(eta)) the problem is solved in mapped coordinates
+u, v with x = X(u), y = Y(v) compressing resolution near dielectric edges
+(X' = eta there).  Implementation is the transformation-optics equivalent: the
+undeformed box filled with eps~ = eps*diag(Y'/X', X'/Y', X'Y') and
+mu~ = diag(Y'/X', X'/Y', X'Y'), acting on the transformed fields
+E~ = (X' Ex, Y' Ey, Ez)  (Ward-Pendry, J = diag(1/X', 1/Y', 1)).  Because
+dx dy = X'Y' du dv absorbs exactly the two metric factors of the transverse
+components, the plain coefficient pseudo-flux e^T v EQUALS the physical
+pseudo-flux: the ASR S-matrix is the physical S-matrix with no normalization
+gauge.  Port modes are numerical eigenvectors of the transformed uniform lead,
+matched to analytic TE/TM labels by field-pattern overlap (eigenvalue proximity
+is NOT reliable in the deep-evanescent tail), aligned inside degenerate TE/TM
+clusters, and flux-orthonormalized -- S = S^T and lossless unitarity hold to
+machine precision.

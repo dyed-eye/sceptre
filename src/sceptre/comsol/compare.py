@@ -78,8 +78,9 @@ def compare_sparams(
     s21_port,
     *,
     deembed: bool = True,
-    n_order: int = 24,
+    n_order: int | None = None,
     out_dir: str | Path | None = None,
+    case: bm.BenchmarkCase = bm.STANDARD,
 ) -> ComparisonReport:
     """Full comparison; pass COMSOL S-parameters referenced at the ports."""
     freqs = np.asarray(freqs, dtype=float)
@@ -89,7 +90,7 @@ def compare_sparams(
         )
     else:
         s11_c, s21_c = np.asarray(s11_port), np.asarray(s21_port)
-    _, s11_s, s21_s = bm.sceptre_s11_s21(freqs, n_order=n_order)
+    _, s11_s, s21_s = bm.sceptre_s11_s21(freqs, n_order=n_order, case=case)
 
     res_s = _dips(freqs, np.abs(s21_s))
     res_c = _dips(freqs, np.abs(s21_c))
@@ -119,11 +120,12 @@ def compare_sparams(
         excluded=excl,
     )
     if out_dir is not None:
-        report.plots = _plots(report, Path(out_dir))
+        suffix = "" if case.name == "standard" else f"_{case.name}"
+        report.plots = _plots(report, Path(out_dir), suffix)
     return report
 
 
-def _plots(rep: ComparisonReport, out_dir: Path) -> list[str]:
+def _plots(rep: ComparisonReport, out_dir: Path, suffix: str = "") -> list[str]:
     import matplotlib
 
     matplotlib.use("Agg")
@@ -144,8 +146,11 @@ def _plots(rep: ComparisonReport, out_dir: Path) -> list[str]:
         ax.grid(alpha=0.3)
         ax.legend()
     axes[1].set_xlabel("frequency [GHz]")
-    fig.suptitle("SCEPTRE vs COMSOL: partial-height dielectric block in WR-90")
-    p = out_dir / "comsol_overlay.png"
+    fig.suptitle(
+        "SCEPTRE vs COMSOL: partial-height dielectric block in WR-90"
+        + (f" [{suffix.strip(chr(95))}]" if suffix else "")
+    )
+    p = out_dir / f"comsol_overlay{suffix}.png"
     fig.tight_layout()
     fig.savefig(p, dpi=150)
     plt.close(fig)
@@ -167,7 +172,7 @@ def _plots(rep: ComparisonReport, out_dir: Path) -> list[str]:
     ax.set_ylabel("|Delta S|")
     ax.grid(alpha=0.3)
     ax.legend()
-    p = out_dir / "comsol_deviation.png"
+    p = out_dir / f"comsol_deviation{suffix}.png"
     fig.tight_layout()
     fig.savefig(p, dpi=150)
     plt.close(fig)

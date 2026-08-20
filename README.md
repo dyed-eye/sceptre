@@ -32,6 +32,14 @@ dielectric obstacles, with numerically stable **S-matrix cascading**, complex-fr
   Delves–Lyness moments) with **Newton refinement**; 2-D parameter-space **EP search**
   that solves the double-root system h = ∂h/∂ω = 0 for h = 1/det S, confirmed by the
   **Puiseux** square-root splitting fit.
+- **ASR for high contrast.** `Solver(..., asr=AsrConfig())` enables Granet-style
+  adaptive spatial resolution, implemented through its transformation-optics
+  equivalent (smooth coordinate map = anisotropic eps~/mu~ on the undeformed box,
+  so the symmetric operator structure and Li's rules carry over untouched).
+  Measured on an eps = 80 ceramic block: ASR at N = 24 beats plain Li at N = 80
+  (~37x cheaper eigensolve at equal accuracy); FEM-verified to 0.13%.  The solver
+  emits a recommendation warning when the permittivity contrast exceeds ~25 and
+  ASR is off.
 
 Conventions (time convention, normalization, port definitions): `refs/CONVENTIONS.md`.
 Validation report incl. the COMSOL cross-check: `VALIDATION.md`.
@@ -81,6 +89,8 @@ src/sceptre/
   solver.py       top-level Solver / SResult API
   poles.py        contour pole/zero finder (argument principle + moments + Newton)
   ep.py           EP Newton (double-root system) + Puiseux confirmation
+  asr.py          adaptive spatial resolution: maps, quadrature Grams, eps~/mu~ ops
+  asr_modes.py    numerical port modes of the ASR-transformed leads
   comsol/         COMSOL detection, MPh driver, Java model generator, comparison
 ```
 
@@ -100,7 +110,10 @@ src/sceptre/
    arXiv:1206.3388 — S-matrix pole calculation recipes.
 7. W. R. Sweeney, C. W. Hsu, A. D. Stone, PRA **102**, 063511 (2020),
    arXiv:1909.04017 — S-matrix zeros and RSM operators.
-8. T. Itoh (ed.), *Numerical Techniques for Microwave and Millimeter-Wave Passive
+8. G. Granet, JOSA A **16**, 2510 (1999); T. Vallius & M. Honkanen, Opt. Express
+   **10**, 24 (2002) — adaptive spatial resolution; A. J. Ward & J. B. Pendry,
+   J. Mod. Opt. **43**, 773 (1996) — coordinate transforms as materials.
+9. T. Itoh (ed.), *Numerical Techniques for Microwave and Millimeter-Wave Passive
    Structures*, Wiley (1989) — closed-guide mode matching, overlap/normalization
    conventions.
 

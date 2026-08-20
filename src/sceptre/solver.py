@@ -13,11 +13,13 @@ for the eigensolves.
 
 from __future__ import annotations
 
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 
 import numpy as np
 
+from .asr import AsrConfig, build_asr_operators, build_maps
 from .basis import ModeBasis
 from .fourier import EpsOperators, build_eps_operators
 from .geometry import CrossSection, Structure
@@ -26,6 +28,11 @@ from .slicesolver import solve_slice
 from .smatrix import SMatrix, cascade, interface_smatrix, propagation_smatrix
 
 C0 = 299792458.0  # vacuum speed of light, m/s
+
+# Above this permittivity contrast the plain Li factorization needs a large
+# truncation order for percent-level accuracy (measured: eps = 80 still ~1% at
+# N = 40); recommend ASR instead of failing silently slowly.
+ASR_RECOMMEND_CONTRAST = 25.0
 
 
 @dataclass(frozen=True)
@@ -76,9 +83,12 @@ class Solver:
         N: int,
         factorization: str = "li",
         lead_eps: complex | None = None,
+        asr: AsrConfig | None = None,
     ):
         if factorization not in ("li", "direct"):
             raise ValueError(f"unknown factorization {factorization!r}")
+        if asr is not None and factorization != "li":
+            raise ValueError("ASR requires factorization='li'")
         self.structure = structure
         self.basis = ModeBasis(structure.waveguide.a, structure.waveguide.b, M, N)
         self.factorization = factorization
@@ -86,22 +96,65 @@ class Solver:
             lead_eps if lead_eps is not None else structure.background
         )
         self.segments = structure.segments()
+        # Fixed for the object's lifetime: _lead/_segment_ops and the ops cache
+        # assume it never changes after construction.
+        self.asr = asr
         self._ops_cache: dict[object, EpsOperators] = {}
+        if asr is not None:
+            self._xmap, self._ymap = build_maps(structure, asr.eta)
+            self._patterns = None  # built lazily (import kept local to _lead)
+        self._maybe_recommend_asr()
+
+    def _maybe_recommend_asr(self) -> None:
+        mags = [abs(self.lead_eps)] + [
+            abs(v) for seg in self.segments for v in seg.cross_section.eps_cells.ravel()
+        ]
+        contrast = max(mags) / min(mags)
+        if self.asr is None and contrast >= ASR_RECOMMEND_CONTRAST:
+            warnings.warn(
+                f"permittivity contrast {contrast:.0f} is high: the plain Li "
+                "factorization converges slowly here (percent-level at N ~ 40 "
+                "for eps ~ 80). Consider Solver(..., asr=AsrConfig()) or verify "
+                "convergence by increasing N.",
+                UserWarning,
+                stacklevel=3,
+            )
+
+    def _lead(self, k0: complex) -> LeadModes:
+        if self.asr is None:
+            return lead_modes(self.basis, k0, self.lead_eps)
+        from .asr_modes import asr_lead_modes, lead_patterns
+
+        if self._patterns is None:
+            self._patterns = lead_patterns(self.basis, self._xmap, self._ymap)
+        layout = CrossSection(
+            np.array([0.0, self.basis.a]),
+            np.array([0.0, self.basis.b]),
+            np.array([[self.lead_eps]], dtype=complex),
+        )
+        ops = self._segment_ops(layout)
+        assert ops is not None  # asr is set, so _segment_ops always builds
+        return asr_lead_modes(self.basis, k0, self.lead_eps, ops, self._patterns)
 
     def _segment_ops(self, layout: CrossSection) -> EpsOperators | None:
-        if layout.is_uniform:
+        if self.asr is None and layout.is_uniform:
             return None  # solve_slice takes the analytic path
-        key = (layout.key(), self.factorization)
+        key = (layout.key(), self.factorization, self.asr)
         if key not in self._ops_cache:
-            self._ops_cache[key] = build_eps_operators(
-                layout, self.basis, self.factorization
-            )
+            if self.asr is not None:
+                self._ops_cache[key] = build_asr_operators(
+                    layout, self.basis, self._xmap, self._ymap
+                )
+            else:
+                self._ops_cache[key] = build_eps_operators(
+                    layout, self.basis, self.factorization
+                )
         return self._ops_cache[key]
 
     def smatrix(self, freq: complex) -> SResult:
         """Total S-matrix at frequency freq [Hz] (complex allowed for continuation)."""
         k0 = 2.0 * np.pi * freq / C0
-        lead = lead_modes(self.basis, k0, self.lead_eps)
+        lead = self._lead(k0)
 
         parts: list[SMatrix] = []
         prev_W, prev_V = lead.W, lead.V
@@ -134,7 +187,7 @@ class Solver:
         """
         if indices is None:
             k0_ref = 2.0 * np.pi * float(np.real(freq)) / C0
-            lead_ref = lead_modes(self.basis, k0_ref, self.lead_eps)
+            lead_ref = self._lead(k0_ref)
             indices = np.flatnonzero(lead_ref.propagating())
         if len(indices) == 0:
             raise ValueError(

@@ -16,6 +16,14 @@ import numpy as np
 from . import benchmark as bm
 
 
+def _eps_str(eps: complex) -> str:
+    """COMSOL expression for a (possibly complex) relative permittivity."""
+    eps = complex(eps)
+    if eps.imag == 0:
+        return f"{eps.real:.12g}"
+    return f"{eps.real:.12g}+{eps.imag:.12g}*i"
+
+
 @dataclass(frozen=True)
 class ComsolSweep:
     freqs: np.ndarray
@@ -25,7 +33,9 @@ class ComsolSweep:
 
 
 def run_benchmark(
-    save_model: str | Path | None = None, cores: int | None = None
+    save_model: str | Path | None = None,
+    cores: int | None = None,
+    case: bm.BenchmarkCase = bm.STANDARD,
 ) -> ComsolSweep:
     """Build + solve the benchmark in COMSOL via MPh.  Raises on any failure."""
     import mph  # deferred: optional dependency
@@ -37,8 +47,8 @@ def run_benchmark(
         mph.start(cores=cores) if cores else mph.start()  # pyright: ignore[reportPrivateImportUsage]
     )
     try:
-        model = client.create("sceptre_benchmark")
-        _build(model.java)
+        model = client.create(f"sceptre_benchmark_{case.name}")
+        _build(model.java, case)
         # Run via the Java API tag: mph's Model.solve() resolves studies by their
         # LABEL ("Study 1"), not the tag we created ("std1").
         try:
@@ -51,7 +61,7 @@ def run_benchmark(
             model.java.sol("sol1").runAll()
         # The sweep grid is what we set in plist; re-deriving it through
         # model.evaluate("freq") only adds a unit-conversion failure mode.
-        freqs = bm.frequencies()
+        freqs = bm.frequencies(case)
         s11 = _complex_eval(model, "emw.S11")
         s21 = _complex_eval(model, "emw.S21")
         if len(s11) != len(freqs) or len(s21) != len(freqs):
@@ -75,9 +85,9 @@ def _complex_eval(model, expr: str) -> np.ndarray:
     return np.asarray(re, dtype=float) + 1j * np.asarray(im, dtype=float)
 
 
-def _build(java) -> None:
+def _build(java, case: bm.BenchmarkCase = bm.STANDARD) -> None:
     a, b = bm.A, bm.B
-    lead, blen, bh = bm.LEAD_LEN, bm.BLOCK_LEN, bm.BLOCK_HEIGHT
+    lead, blen, bh = bm.LEAD_LEN, case.block_len, case.block_height
     tol = 1e-6
 
     java.component().create("comp1", True)
@@ -122,7 +132,7 @@ def _build(java) -> None:
     mat_air.propertyGroup("def").set("electricconductivity", ["0"])
     mat_d = comp.material().create("mat_diel", "Common")
     mat_d.selection().named("sel_diel")
-    mat_d.propertyGroup("def").set("relpermittivity", [str(bm.EPS_BLOCK)])
+    mat_d.propertyGroup("def").set("relpermittivity", [_eps_str(case.eps_block)])
     mat_d.propertyGroup("def").set("relpermeability", ["1"])
     mat_d.propertyGroup("def").set("electricconductivity", ["0"])
 
@@ -141,13 +151,13 @@ def _build(java) -> None:
     mesh = comp.mesh().create("mesh1")
     size = mesh.feature("size")
     size.set("custom", "on")
-    size.set("hmax", 2.4e-3)  # ~ lambda0/10 at 12 GHz in vacuum (phase accuracy)
+    size.set("hmax", case.mesh_air)
     fdiel = mesh.create("siz_diel", "Size")
     fdiel.selection().geom("geom1", 3)
     fdiel.selection().named("sel_diel")
     fdiel.set("custom", "on")
     fdiel.set("hmaxactive", True)
-    fdiel.set("hmax", 1.0e-3)  # ~ lambda_diel/8 at 12 GHz in eps = 9
+    fdiel.set("hmax", case.mesh_diel)
     mesh.create("ftet", "FreeTet")
     mesh.run()
 
@@ -156,7 +166,7 @@ def _build(java) -> None:
     # EXPLICIT frequency unit: the Frequency study step interprets bare numbers
     # in its own default unit (GHz in COMSOL 6.x), which silently shifts the
     # sweep by 9 orders of magnitude and yields a zero field.
-    plist = " ".join(f"{f:.10g}[Hz]" for f in bm.frequencies())
+    plist = " ".join(f"{f:.10g}[Hz]" for f in bm.frequencies(case))
     frq.set("plist", plist)
 
     # Bind the ports to the study step, matching what the GUI does when a study

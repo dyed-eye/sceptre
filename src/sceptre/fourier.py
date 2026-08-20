@@ -119,16 +119,24 @@ def cos_overlap(Mmax: int, a: float, x1: float, x2: float) -> np.ndarray:
 
 @dataclass(frozen=True)
 class EpsOperators:
-    """Multiplication-by-eps operators on the component spaces of a ModeBasis.
+    """Multiplication operators of the (possibly transformed) materials.
 
     exx : acts on X-space (Ex);   Li: inverse rule in x, direct in y.
     eyy : acts on Y-space (Ey);   Li: inverse rule in y, direct in x.
-    ezz : acts on Z-space (Ez);   direct rule (invert this matrix for the Ez elimination).
+    ezz : acts on Z-space (Ez);   direct rule (inverted for the Ez elimination).
+
+    The mu~ fields are None for physical mu = 1; under ASR (asr.py) they carry
+    the smooth metric factors of the coordinate transformation:
+    myy = mu~_y on X-space (H~y), mxx = mu~_x on Y-space (H~x),
+    mzz = mu~_z on W-space (H~z; inverted for the Hz elimination).
     """
 
     exx: np.ndarray
     eyy: np.ndarray
     ezz: np.ndarray
+    mxx: np.ndarray | None = None
+    myy: np.ndarray | None = None
+    mzz: np.ndarray | None = None
 
 
 def build_eps_operators(

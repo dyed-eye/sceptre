@@ -52,17 +52,9 @@ class LeadModes:
         return np.abs(np.imag(self.beta)) <= rel_tol * np.abs(self.beta)
 
 
-def lead_modes(basis: ModeBasis, k0: complex, eps: complex = 1.0 + 0.0j) -> LeadModes:
+def mode_table(basis: ModeBasis) -> list[tuple[float, str, int, int]]:
+    """Complete lead-mode enumeration, sorted by (cutoff, TE-before-TM, m, n)."""
     a, b, M, N = basis.a, basis.b, basis.M, basis.N
-    T = basis.size_t
-
-    # 1-D normalization factors of the orthonormal basis functions.
-    def nc(m: int, length: float) -> float:
-        return np.sqrt((1.0 if m == 0 else 2.0) / length)
-
-    def ns(m: int, length: float) -> float:
-        return np.sqrt(2.0 / length)
-
     entries = []  # (kc2, sort_type, kind, m, n)
     for m in range(0, M + 1):
         for n in range(0, N + 1):
@@ -73,8 +65,23 @@ def lead_modes(basis: ModeBasis, k0: complex, eps: complex = 1.0 + 0.0j) -> Lead
         for n in range(1, N + 1):
             entries.append(((m * np.pi / a) ** 2 + (n * np.pi / b) ** 2, 1, "TM", m, n))
     entries.sort(key=lambda e: (e[0], e[1], e[3], e[4]))
-    if len(entries) != T:
+    if len(entries) != basis.size_t:
         raise AssertionError("mode count must equal transverse basis dimension")
+    return [(kc2, kind, m, n) for kc2, _, kind, m, n in entries]
+
+
+def lead_modes(basis: ModeBasis, k0: complex, eps: complex = 1.0 + 0.0j) -> LeadModes:
+    a, b = basis.a, basis.b
+    T = basis.size_t
+
+    # 1-D normalization factors of the orthonormal basis functions.
+    def nc(m: int, length: float) -> float:
+        return np.sqrt((1.0 if m == 0 else 2.0) / length)
+
+    def ns(m: int, length: float) -> float:
+        return np.sqrt(2.0 / length)
+
+    entries = mode_table(basis)
 
     W = np.zeros((T, T), dtype=complex)
     V = np.zeros((T, T), dtype=complex)
@@ -82,7 +89,7 @@ def lead_modes(basis: ModeBasis, k0: complex, eps: complex = 1.0 + 0.0j) -> Lead
     kc2 = np.zeros(T)
     labels = []
 
-    for col, (kc2_val, _, kind, m, n) in enumerate(entries):
+    for col, (kc2_val, kind, m, n) in enumerate(entries):
         kx, ky = m * np.pi / a, n * np.pi / b
         ex = np.zeros(basis.X.size, dtype=complex)
         ey = np.zeros(basis.Y.size, dtype=complex)

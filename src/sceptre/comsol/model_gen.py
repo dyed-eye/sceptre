@@ -87,13 +87,13 @@ public class SceptreBenchmark {{
 
     model.component("comp1").mesh().create("mesh1");
     model.component("comp1").mesh("mesh1").feature("size").set("custom", "on");
-    model.component("comp1").mesh("mesh1").feature("size").set("hmax", 2.4E-3);
+    model.component("comp1").mesh("mesh1").feature("size").set("hmax", {mesh_air});
     model.component("comp1").mesh("mesh1").create("siz_diel", "Size");
     model.component("comp1").mesh("mesh1").feature("siz_diel").selection().geom("geom1", 3);
     model.component("comp1").mesh("mesh1").feature("siz_diel").selection().named("sel_diel");
     model.component("comp1").mesh("mesh1").feature("siz_diel").set("custom", "on");
     model.component("comp1").mesh("mesh1").feature("siz_diel").set("hmaxactive", true);
-    model.component("comp1").mesh("mesh1").feature("siz_diel").set("hmax", 1.0E-3);
+    model.component("comp1").mesh("mesh1").feature("siz_diel").set("hmax", {mesh_diel});
     model.component("comp1").mesh("mesh1").create("ftet", "FreeTet");
     model.component("comp1").mesh("mesh1").run();
 
@@ -142,24 +142,27 @@ public class SceptreBenchmark {{
 def write_java(
     out_path: str | Path,
     comsol_bin: str = r"C:\Program Files\COMSOL\COMSOL61\Multiphysics\bin\win64",
+    case: bm.BenchmarkCase = bm.STANDARD,
 ) -> Path:
     tol = 1e-6
     text = _TEMPLATE.format(
         a=bm.A,
         b=bm.B,
-        bh=bm.BLOCK_HEIGHT,
-        bh_tol=bm.BLOCK_HEIGHT,
-        blen=bm.BLOCK_LEN,
-        ltot=bm.BLOCK_LEN + 2 * bm.LEAD_LEN,
+        bh=case.block_height,
+        bh_tol=case.block_height,
+        blen=case.block_len,
+        ltot=case.block_len + 2 * bm.LEAD_LEN,
         zmin=-bm.LEAD_LEN,
         zmin_p1=-bm.LEAD_LEN - tol,
         zmax_p1=-bm.LEAD_LEN + tol,
-        zmin_p2=bm.BLOCK_LEN + bm.LEAD_LEN - tol,
-        zmax_p2=bm.BLOCK_LEN + bm.LEAD_LEN + tol,
+        zmin_p2=case.block_len + bm.LEAD_LEN - tol,
+        zmax_p2=case.block_len + bm.LEAD_LEN + tol,
         zmin_d=-tol,
-        zmax_d=bm.BLOCK_LEN + tol,
-        eps=bm.EPS_BLOCK,
-        plist=" ".join(f"{f:.10g}[Hz]" for f in bm.frequencies()),
+        zmax_d=case.block_len + tol,
+        eps=case.eps_block,
+        mesh_air=case.mesh_air,
+        mesh_diel=case.mesh_diel,
+        plist=" ".join(f"{f:.10g}[Hz]" for f in bm.frequencies(case)),
         comsol_bin=comsol_bin,
         xtol_neg=-tol,
         xtol_pos=bm.A + tol,

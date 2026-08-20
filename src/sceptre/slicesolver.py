@@ -51,21 +51,36 @@ class SliceModes:
 def build_fg(
     ops: EpsOperators, basis: ModeBasis, k0: complex
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Assemble the symmetric F and G operators for one slice."""
+    """Assemble the symmetric F and G operators for one slice.
+
+    With ops.m** = None this is the physical mu = 1 problem.  Under ASR the
+    mu~ operators carry the smooth metric of the coordinate map (asr.py); they
+    are symmetric Gram matrices, so F = F^T and G = G^T are preserved and with
+    them the structural reciprocity/unitarity of the cascade.
+    """
     ezz_inv = np.linalg.inv(ops.ezz)
     Ix = np.eye(basis.X.size)
     Iy = np.eye(basis.Y.size)
+    myy = Ix * k0 if ops.myy is None else k0 * ops.myy
+    mxx = Iy * k0 if ops.mxx is None else k0 * ops.mxx
 
-    a11 = k0 * Ix + basis.dx_ZX @ ezz_inv @ basis.dx_XZ / k0
+    a11 = myy + basis.dx_ZX @ ezz_inv @ basis.dx_XZ / k0
     a12 = basis.dx_ZX @ ezz_inv @ basis.dy_YZ / k0
     a21 = basis.dy_ZY @ ezz_inv @ basis.dx_XZ / k0
-    a22 = k0 * Iy + basis.dy_ZY @ ezz_inv @ basis.dy_YZ / k0
+    a22 = mxx + basis.dy_ZY @ ezz_inv @ basis.dy_YZ / k0
     F = 1j * np.block([[a11, a12], [a21, a22]])
 
-    g11 = k0 * ops.exx + basis.dy_WX @ basis.dy_XW / k0
-    g12 = -basis.dy_WX @ basis.dx_YW / k0
-    g21 = -basis.dx_WY @ basis.dy_XW / k0
-    g22 = k0 * ops.eyy + basis.dx_WY @ basis.dx_YW / k0
+    if ops.mzz is None:
+        g11 = k0 * ops.exx + basis.dy_WX @ basis.dy_XW / k0
+        g12 = -basis.dy_WX @ basis.dx_YW / k0
+        g21 = -basis.dx_WY @ basis.dy_XW / k0
+        g22 = k0 * ops.eyy + basis.dx_WY @ basis.dx_YW / k0
+    else:
+        mzz_inv = np.linalg.inv(ops.mzz)
+        g11 = k0 * ops.exx + basis.dy_WX @ mzz_inv @ basis.dy_XW / k0
+        g12 = -basis.dy_WX @ mzz_inv @ basis.dx_YW / k0
+        g21 = -basis.dx_WY @ mzz_inv @ basis.dy_XW / k0
+        g22 = k0 * ops.eyy + basis.dx_WY @ mzz_inv @ basis.dx_YW / k0
     G = 1j * np.block([[g11, g12], [g21, g22]])
     return F, G
 
@@ -90,12 +105,16 @@ def solve_slice(
     factorization: str = "li",
     ops: EpsOperators | None = None,
 ) -> SliceModes:
-    """Modal decomposition of one z-uniform slice at (complex) wavenumber k0."""
-    if layout.is_uniform:
-        lead = lead_modes(basis, k0, layout.uniform_eps)
-        return SliceModes(lead.W, lead.V, lead.beta)
+    """Modal decomposition of one z-uniform slice at (complex) wavenumber k0.
 
+    A caller-provided `ops` always takes the numerical path -- under ASR even
+    a uniform layout carries nontrivial metric operators, so the analytic
+    shortcut is only valid when we assemble the operators ourselves.
+    """
     if ops is None:
+        if layout.is_uniform:
+            lead = lead_modes(basis, k0, layout.uniform_eps)
+            return SliceModes(lead.W, lead.V, lead.beta)
         ops = build_eps_operators(layout, basis, factorization)
     F, G = build_fg(ops, basis, k0)
     lam, W = sla.eig(F @ G)  # LAPACK zgeev; keep outside any jitted code

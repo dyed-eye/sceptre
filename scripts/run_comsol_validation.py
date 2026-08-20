@@ -15,6 +15,7 @@ from pathlib import Path
 
 import numpy as np
 
+from sceptre.comsol import benchmark as bm
 from sceptre.comsol import detect_comsol
 from sceptre.comsol.model_gen import write_java
 
@@ -23,6 +24,9 @@ OUT = ROOT / "comsol"
 
 
 def main() -> int:
+    case = bm.CERAMIC if "--ceramic" in sys.argv[1:] else bm.STANDARD
+    print(f"benchmark case: {case.name} (eps = {case.eps_block}, ASR = {case.use_asr})")
+    suffix = "" if case.name == "standard" else f"_{case.name}"
     installs = detect_comsol()
     if installs:
         for ins in installs:
@@ -36,7 +40,9 @@ def main() -> int:
         if installs
         else r"C:\Program Files\COMSOL\COMSOL61\Multiphysics\bin\win64"
     )
-    java_path = write_java(OUT / "SceptreBenchmark.java", comsol_bin=comsol_bin)
+    java_path = write_java(
+        OUT / f"SceptreBenchmark{suffix}.java", comsol_bin=comsol_bin, case=case
+    )
     print(f"emitted Java fallback model: {java_path}")
 
     if not installs:
@@ -50,9 +56,11 @@ def main() -> int:
         from sceptre.comsol.mph_driver import run_benchmark
 
         print("starting COMSOL via MPh (this builds, meshes and sweeps the model)...")
-        sweep = run_benchmark(save_model=OUT / "sceptre_benchmark.mph")
+        sweep = run_benchmark(
+            save_model=OUT / f"sceptre_benchmark{suffix}.mph", case=case
+        )
         print(f"sweep done: {len(sweep.freqs)} frequencies")
-        csv_path = OUT / "sceptre_comsol_sparams.csv"
+        csv_path = OUT / f"sceptre_comsol_sparams{suffix}.csv"
         np.savetxt(
             csv_path,
             np.column_stack(
@@ -85,7 +93,7 @@ def main() -> int:
     from sceptre.comsol.compare import compare_sparams
 
     report = compare_sparams(
-        sweep.freqs, sweep.s11_port, sweep.s21_port, out_dir=OUT / "output"
+        sweep.freqs, sweep.s11_port, sweep.s21_port, out_dir=OUT / "output", case=case
     )
     print(report.summary())
     for p in report.plots:
