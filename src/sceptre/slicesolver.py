@@ -37,6 +37,7 @@ from .basis import ModeBasis
 from .fourier import EpsOperators, build_eps_operators
 from .geometry import CrossSection
 from .modes import lead_modes
+from .symmetry import Sector, lead_columns, slice_eps_ops
 
 
 @dataclass(frozen=True)
@@ -49,7 +50,7 @@ class SliceModes:
 
 
 def build_fg(
-    ops: EpsOperators, basis: ModeBasis, k0: complex
+    ops: EpsOperators, basis: ModeBasis, k0: complex, sector: Sector | None = None
 ) -> tuple[np.ndarray, np.ndarray]:
     """Assemble the symmetric F and G operators for one slice.
 
@@ -57,30 +58,48 @@ def build_fg(
     mu~ operators carry the smooth metric of the coordinate map (asr.py); they
     are symmetric Gram matrices, so F = F^T and G = G^T are preserved and with
     them the structural reciprocity/unitarity of the cascade.
-    """
-    ezz_inv = np.linalg.inv(ops.ezz)
-    Ix = np.eye(basis.X.size)
-    Iy = np.eye(basis.Y.size)
-    myy = Ix * k0 if ops.myy is None else k0 * ops.myy
-    mxx = Iy * k0 if ops.mxx is None else k0 * ops.mxx
 
-    a11 = myy + basis.dx_ZX @ ezz_inv @ basis.dx_XZ / k0
-    a12 = basis.dx_ZX @ ezz_inv @ basis.dy_YZ / k0
-    a21 = basis.dy_ZY @ ezz_inv @ basis.dx_XZ / k0
-    a22 = mxx + basis.dy_ZY @ ezz_inv @ basis.dy_YZ / k0
+    With a sector, every operator is restricted to one x-mirror parity class
+    (symmetry.py) BEFORE the products, so assembly and the later eigensolve run
+    at half size.  Only valid for an x-symmetric layout (the discarded
+    cross-parity blocks are zero there); ASR operators are not supported.
+    """
+    if sector is None:
+        dx_ZX, dx_XZ = basis.dx_ZX, basis.dx_XZ
+        dy_ZY, dy_YZ = basis.dy_ZY, basis.dy_YZ
+        dy_WX, dy_XW = basis.dy_WX, basis.dy_XW
+        dx_WY, dx_YW = basis.dx_WY, basis.dx_YW
+        nx, ny = basis.X.size, basis.Y.size
+    else:
+        ops = slice_eps_ops(ops, sector)  # raises on ASR metric operators
+        xs, ys, zs, ws = sector.X, sector.Y, sector.Z, sector.W
+        dx_ZX, dx_XZ = basis.dx_ZX[np.ix_(xs, zs)], basis.dx_XZ[np.ix_(zs, xs)]
+        dy_ZY, dy_YZ = basis.dy_ZY[np.ix_(ys, zs)], basis.dy_YZ[np.ix_(zs, ys)]
+        dy_WX, dy_XW = basis.dy_WX[np.ix_(xs, ws)], basis.dy_XW[np.ix_(ws, xs)]
+        dx_WY, dx_YW = basis.dx_WY[np.ix_(ys, ws)], basis.dx_YW[np.ix_(ws, ys)]
+        nx, ny = len(xs), len(ys)
+
+    ezz_inv = np.linalg.inv(ops.ezz)
+    myy = np.eye(nx) * k0 if ops.myy is None else k0 * ops.myy
+    mxx = np.eye(ny) * k0 if ops.mxx is None else k0 * ops.mxx
+
+    a11 = myy + dx_ZX @ ezz_inv @ dx_XZ / k0
+    a12 = dx_ZX @ ezz_inv @ dy_YZ / k0
+    a21 = dy_ZY @ ezz_inv @ dx_XZ / k0
+    a22 = mxx + dy_ZY @ ezz_inv @ dy_YZ / k0
     F = 1j * np.block([[a11, a12], [a21, a22]])
 
     if ops.mzz is None:
-        g11 = k0 * ops.exx + basis.dy_WX @ basis.dy_XW / k0
-        g12 = -basis.dy_WX @ basis.dx_YW / k0
-        g21 = -basis.dx_WY @ basis.dy_XW / k0
-        g22 = k0 * ops.eyy + basis.dx_WY @ basis.dx_YW / k0
+        g11 = k0 * ops.exx + dy_WX @ dy_XW / k0
+        g12 = -dy_WX @ dx_YW / k0
+        g21 = -dx_WY @ dy_XW / k0
+        g22 = k0 * ops.eyy + dx_WY @ dx_YW / k0
     else:
         mzz_inv = np.linalg.inv(ops.mzz)
-        g11 = k0 * ops.exx + basis.dy_WX @ mzz_inv @ basis.dy_XW / k0
-        g12 = -basis.dy_WX @ mzz_inv @ basis.dx_YW / k0
-        g21 = -basis.dx_WY @ mzz_inv @ basis.dy_XW / k0
-        g22 = k0 * ops.eyy + basis.dx_WY @ mzz_inv @ basis.dx_YW / k0
+        g11 = k0 * ops.exx + dy_WX @ mzz_inv @ dy_XW / k0
+        g12 = -dy_WX @ mzz_inv @ dx_YW / k0
+        g21 = -dx_WY @ mzz_inv @ dy_XW / k0
+        g22 = k0 * ops.eyy + dx_WY @ mzz_inv @ dx_YW / k0
     G = 1j * np.block([[g11, g12], [g21, g22]])
     return F, G
 
@@ -104,19 +123,27 @@ def solve_slice(
     k0: complex,
     factorization: str = "li",
     ops: EpsOperators | None = None,
+    sector: Sector | None = None,
 ) -> SliceModes:
     """Modal decomposition of one z-uniform slice at (complex) wavenumber k0.
 
     A caller-provided `ops` always takes the numerical path -- under ASR even
     a uniform layout carries nontrivial metric operators, so the analytic
     shortcut is only valid when we assemble the operators ourselves.
+
+    With a sector, the returned modes are the half-size restriction to one
+    x-mirror parity class (rows = sector.t of the transverse vector).
     """
     if ops is None:
         if layout.is_uniform:
             lead = lead_modes(basis, k0, layout.uniform_eps)
-            return SliceModes(lead.W, lead.V, lead.beta)
+            if sector is None:
+                return SliceModes(lead.W, lead.V, lead.beta)
+            cols = lead_columns(lead.labels, sector)
+            rc = np.ix_(sector.t, cols)
+            return SliceModes(lead.W[rc], lead.V[rc], lead.beta[cols])
         ops = build_eps_operators(layout, basis, factorization)
-    F, G = build_fg(ops, basis, k0)
+    F, G = build_fg(ops, basis, k0, sector)
     lam, W = sla.eig(F @ G)  # LAPACK zgeev; keep outside any jitted code
     beta = _forward_branch(np.sqrt(-lam + 0j))
     if np.any(np.abs(beta) < 1e-14 * np.max(np.abs(beta))):

@@ -26,6 +26,7 @@ from .geometry import CrossSection, Structure
 from .modes import LeadModes, lead_modes
 from .slicesolver import solve_slice
 from .smatrix import SMatrix, cascade, interface_smatrix, propagation_smatrix
+from .symmetry import Sector, lead_columns, require_x_symmetric, x_sectors
 
 C0 = 299792458.0  # vacuum speed of light, m/s
 
@@ -84,11 +85,16 @@ class Solver:
         factorization: str = "li",
         lead_eps: complex | None = None,
         asr: AsrConfig | None = None,
+        symmetry: str | None = None,
     ):
         if factorization not in ("li", "direct"):
             raise ValueError(f"unknown factorization {factorization!r}")
         if asr is not None and factorization != "li":
             raise ValueError("ASR requires factorization='li'")
+        if symmetry not in (None, "x"):
+            raise ValueError(f"unknown symmetry {symmetry!r} (supported: 'x')")
+        if symmetry is not None and asr is not None:
+            raise ValueError("symmetry='x' is not supported together with ASR")
         self.structure = structure
         self.basis = ModeBasis(structure.waveguide.a, structure.waveguide.b, M, N)
         self.factorization = factorization
@@ -99,6 +105,12 @@ class Solver:
         # Fixed for the object's lifetime: _lead/_segment_ops and the ops cache
         # assume it never changes after construction.
         self.asr = asr
+        self.symmetry = symmetry
+        self._sectors: tuple[Sector, Sector] | None = None
+        if symmetry == "x":
+            for seg in self.segments:
+                require_x_symmetric(seg.cross_section, structure.waveguide.a)
+            self._sectors = x_sectors(self.basis)
         self._ops_cache: dict[object, EpsOperators] = {}
         if asr is not None:
             # Compression intervals shorter than the basis half-period 2a/M
@@ -166,9 +178,33 @@ class Solver:
         """Total S-matrix at frequency freq [Hz] (complex allowed for continuation)."""
         k0 = 2.0 * np.pi * freq / C0
         lead = self._lead(k0)
+        if self._sectors is None:
+            return SResult(freq, self._cascade(lead, k0, None, lead.W, lead.V), lead)
 
+        # x-mirror sectorization: solve the two half-size parity classes
+        # independently and scatter them back into the full lead-mode ordering
+        # (cross-sector scattering is exactly zero for a symmetric structure).
+        T = self.basis.size_t
+        merged = [np.zeros((T, T), dtype=complex) for _ in range(4)]
+        for sec in self._sectors:
+            cols = lead_columns(lead.labels, sec)
+            rc = np.ix_(sec.t, cols)
+            s = self._cascade(lead, k0, sec, lead.W[rc], lead.V[rc])
+            ix = np.ix_(cols, cols)
+            for dst, block in zip(merged, (s.s11, s.s12, s.s21, s.s22)):
+                dst[ix] = block
+        return SResult(freq, SMatrix(*merged), lead)
+
+    def _cascade(
+        self,
+        lead: LeadModes,
+        k0: complex,
+        sector: Sector | None,
+        lead_W: np.ndarray,
+        lead_V: np.ndarray,
+    ) -> SMatrix:
         parts: list[SMatrix] = []
-        prev_W, prev_V = lead.W, lead.V
+        prev_W, prev_V = lead_W, lead_V
         for seg in self.segments:
             modes = solve_slice(
                 seg.cross_section,
@@ -176,12 +212,13 @@ class Solver:
                 k0,
                 self.factorization,
                 ops=self._segment_ops(seg.cross_section),
+                sector=sector,
             )
             parts.append(interface_smatrix(prev_W, prev_V, modes.W, modes.V))
             parts.append(propagation_smatrix(modes.beta, seg.length))
             prev_W, prev_V = modes.W, modes.V
-        parts.append(interface_smatrix(prev_W, prev_V, lead.W, lead.V))
-        return SResult(freq, cascade(parts), lead)
+        parts.append(interface_smatrix(prev_W, prev_V, lead_W, lead_V))
+        return cascade(parts)
 
     def sweep(self, freqs: Sequence[complex] | np.ndarray) -> list[SResult]:
         return [self.smatrix(f) for f in np.asarray(freqs).ravel()]

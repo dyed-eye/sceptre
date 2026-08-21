@@ -86,8 +86,9 @@ class AsrMap1D:
     breakpoints regardless.
     """
 
-    def __init__(self, length: float, interior_edges, eta: float,
-                 min_interval: float = 0.0):
+    def __init__(
+        self, length: float, interior_edges, eta: float, min_interval: float = 0.0
+    ):
         interior = sorted(
             float(e)
             for e in interior_edges

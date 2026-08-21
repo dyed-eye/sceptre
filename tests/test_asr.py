@@ -186,8 +186,9 @@ def test_build_maps_collects_edges():
 # Edges closer than the basis can resolve must not become compression points.
 
 
-def _staircase_disk(a: float, r: float, h: float, eps: complex, k: int,
-                    cy_off: float = 0.0):
+def _staircase_disk(
+    a: float, r: float, h: float, eps: complex, k: int, cy_off: float = 0.0
+):
     """K x-strip staircase of a cylinder (axis || z) in an a x a guide; cy_off
     shifts the centre in y (a wall-touching disk creates near-coincident edges,
     the worst case for the ASR map)."""
@@ -200,8 +201,15 @@ def _staircase_disk(a: float, r: float, h: float, eps: complex, k: int,
             continue
         half = np.sqrt(half)
         boxes.append(
-            Box(a / 2 + x1, a / 2 + x2, max(cy - half, 0.0), min(cy + half, a),
-                0.0, h, eps)
+            Box(
+                a / 2 + x1,
+                a / 2 + x2,
+                max(cy - half, 0.0),
+                min(cy + half, a),
+                0.0,
+                h,
+                eps,
+            )
         )
     return Structure(Waveguide(a, a), boxes)
 
@@ -238,8 +246,9 @@ def test_build_maps_thins_and_warns_on_staircase():
     # sparse-edge structures are untouched and silent
     with warnings.catch_warnings():
         warnings.simplefilter("error")
-        _, ymap_block = build_maps(_block_structure(80.0), eta=0.3,
-                                   min_x=2 * A, min_y=B / 12)
+        _, ymap_block = build_maps(
+            _block_structure(80.0), eta=0.3, min_x=2 * A, min_y=B / 12
+        )
     assert np.any(np.isclose(ymap_block.breaks, EDGE, rtol=1e-12))
 
 

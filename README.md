@@ -42,7 +42,10 @@ dielectric obstacles, with numerically stable **S-matrix cascading**, complex-fr
   ASR is off.
 
 Conventions (time convention, normalization, port definitions): `refs/CONVENTIONS.md`.
-Validation report incl. the COMSOL cross-check: `VALIDATION.md`.
+Validation status: analytic cases at machine precision; unitarity/reciprocity at
+1e-10..1e-14; live COMSOL 6.1 FEM cross-checks at 0.6–0.7% (ε = 9, plain Li) and
+0.13% (ε = 80, ASR). The full validation log (`VALIDATION.md`) is a local artifact,
+deliberately kept out of version control.
 
 ## Install / run
 
@@ -63,7 +66,8 @@ from sceptre import Box, Structure, Solver, Waveguide
 wg = Waveguide(a=0.02286, b=0.01016)          # WR-90, dimensions in meters
 block = Box(x1=0, x2=wg.a, y1=0, y2=0.45*wg.b,
             z1=0, z2=0.008, eps=9.0)          # partial-height dielectric block
-solver = Solver(Structure(wg, [block]), M=1, N=24, factorization="li")
+solver = Solver(Structure(wg, [block]), M=1, N=24,  # M, N: modal truncation
+                factorization="li")                 # orders along x and y
 
 res = solver.smatrix(10e9)                     # S at 10 GHz
 s21 = res.coeff(2, ("TE", 1, 0), 1, ("TE", 1, 0))
@@ -75,6 +79,57 @@ det = lambda f: solver.det_port_s(f, np.array([0]))     # TE10 port block
 found = find_zeros_poles(det, center=10e9 - 0.3e9j, half_width=2e9)
 print(found.summary())                         # zeros & poles of det S
 ```
+
+## Performance essentials
+
+The single biggest lever, worth ~10× on a typical desktop: **set BLAS threads to
+4 before numpy first loads**. The cascade algebra is dominated by LAPACK LU calls
+(`inv`/`solve`), and OpenBLAS at its default thread count *thrashes* on the
+matrix sizes SCEPTRE produces (measured on a 16-core laptop with OpenBLAS: a
+312×312 inversion takes 217 ms at 16 threads, 10 ms at 4). Setting the env var
+later, or inside a worker process after `import numpy`, silently does nothing:
+
+```python
+import os
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "4")   # FIRST, before numpy
+import numpy as np
+from sceptre import Solver
+```
+
+Measured per-frequency costs after this fix (same 16-core laptop, 4 threads):
+
+| case | truncation | s/point |
+|---|---|---|
+| ε = 6.4 twisted-bar pair (3 z-segments) | M = N = 12 | 0.9 |
+| ε = 80 staircased disk | M = N = 24 | 10.6 |
+| ε = 80 staircased disk | M = N = 32 | 50 |
+| ε = 80 staircased disk | M = N = 40 | ~200 |
+
+If solves feel 10× slower than this, check the thread setting before blaming the
+method.
+
+Second lever, worth another ~3× when it applies: structures mirror-symmetric
+about x = a/2 (centred disks and staircases) can pass
+`Solver(..., symmetry="x")` — the modal problem splits into two independent
+half-size parity sectors, one per port polarization, with bit-identical S
+(1e-13). The ε = 80 disk above drops to 3.9 s/pt at N = 24 and 15 s/pt at
+N = 32. See USAGE §7.
+
+## Sanity checks that catch real bugs
+
+- **Column energy**: for a lossless structure every column of the propagating
+  `port_smatrix()` must sum to 1 to ~1e-6. This single check caught a real ASR
+  bug — it is the difference between "converging" and "wrong".
+- **Reciprocity is structural** (S = Sᵀ to ~1e-13); if it's off, you mislabeled
+  ports or modes, not physics.
+- **Symmetry controls**: an untwisted bar pair must give exactly zero cross-pol;
+  a mirrored geometry must equal the enantiomer transform M·S·M, M = diag(1,−1).
+  These cost one solve each and validate the whole geometry/mode plumbing.
+
+More field-tested recipes — parallel sweeps, staircasing curved and rotated
+shapes, ASR vs plain Li at high contrast, N-ladders, comparing against other
+solvers or measurements, pole-based resonance extraction — in
+[docs/USAGE.md](docs/USAGE.md).
 
 ## Package layout
 
