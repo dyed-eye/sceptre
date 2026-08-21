@@ -44,6 +44,7 @@ References:
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 
 import numpy as np
@@ -72,14 +73,35 @@ class AsrConfig:
 
 
 class AsrMap1D:
-    """Piecewise-smooth bijection X: [0, L] -> [0, L] with X(u_j) = u_j at edges."""
+    """Piecewise-smooth bijection X: [0, L] -> [0, L] with X(u_j) = u_j at edges.
 
-    def __init__(self, length: float, interior_edges, eta: float):
-        edges = [0.0, float(length)]
-        for e in interior_edges:
-            if _EDGE_MERGE_TOL * length < e < length * (1 - _EDGE_MERGE_TOL):
-                edges.append(float(e))
+    min_interval > 0 thins dense edge sets: an interior edge becomes a map
+    breakpoint only if it is at least min_interval away from the previously
+    kept breakpoint and from the far wall.  On each interval X' swings
+    eta -> 2-eta -> eta, so intervals shorter than the basis resolution put
+    metric content beyond the representable bandwidth (aliased operators) and
+    destabilize the numerical lead-mode stage; such edges must not compress.
+    Dropped edges lose only the ASR resolution boost -- quadrature stays exact
+    because build_asr_operators integrates on the union of cell edges and map
+    breakpoints regardless.
+    """
+
+    def __init__(self, length: float, interior_edges, eta: float,
+                 min_interval: float = 0.0):
+        interior = sorted(
+            float(e)
+            for e in interior_edges
+            if _EDGE_MERGE_TOL * length < e < length * (1 - _EDGE_MERGE_TOL)
+        )
         self.length = float(length)
+        self.dropped = 0  # edges rejected by min_interval (coincidence merges
+        edges = [0.0]  # by the rounding below stay silent, as before)
+        for e in interior:
+            if e - edges[-1] >= min_interval and length - e >= min_interval:
+                edges.append(e)
+            else:
+                self.dropped += 1
+        edges.append(float(length))
         self.breaks = np.unique(np.round(np.asarray(edges), 15))
         self.eta = float(eta)
         self.identity = self.eta == 1.0 or len(self.breaks) == 2
@@ -113,17 +135,42 @@ class AsrMap1D:
         return 1.0 - (1.0 - self.eta) * np.cos(2 * np.pi * t)
 
 
-def build_maps(structure: Structure, eta: float) -> tuple[AsrMap1D, AsrMap1D]:
+def build_maps(
+    structure: Structure, eta: float, min_x: float = 0.0, min_y: float = 0.0
+) -> tuple[AsrMap1D, AsrMap1D]:
     """One shared map per direction from the union of edges over ALL segments
     (all slices must live in the same u, v coordinates for trivial interface
-    matching in the S-cascade)."""
+    matching in the S-cascade).
+
+    min_x / min_y thin edges denser than the caller's basis can resolve (see
+    AsrMap1D); a warning reports how many compression points were dropped so a
+    staircase-heavy structure degrades transparently rather than aliasing.
+    """
     a, b = structure.waveguide.a, structure.waveguide.b
     xs: list[float] = []
     ys: list[float] = []
     for seg in structure.segments():
         xs.extend(seg.cross_section.x_edges[1:-1])
         ys.extend(seg.cross_section.y_edges[1:-1])
-    return AsrMap1D(a, xs, eta), AsrMap1D(b, ys, eta)
+    xmap = AsrMap1D(a, xs, eta, min_interval=min_x)
+    ymap = AsrMap1D(b, ys, eta, min_interval=min_y)
+    # report per axis, and only for axes where thinning was actually requested
+    parts = [
+        f"{m.dropped} {ax}-edge(s)"
+        for ax, m, lim in (("x", xmap, min_x), ("y", ymap, min_y))
+        if lim > 0.0 and m.dropped
+    ]
+    if parts:
+        warnings.warn(
+            f"ASR map thinned: {' and '.join(parts)} closer than the basis "
+            "resolution were not made compression points (dense staircases "
+            "alias the metric operators). The dropped edges keep exact "
+            "quadrature but no ASR resolution boost; for heavily staircased "
+            "shapes consider plain Li with a larger N.",
+            UserWarning,
+            stacklevel=2,
+        )
+    return xmap, ymap
 
 
 # ---------------------------------------------------------------------------

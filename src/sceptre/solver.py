@@ -101,7 +101,18 @@ class Solver:
         self.asr = asr
         self._ops_cache: dict[object, EpsOperators] = {}
         if asr is not None:
-            self._xmap, self._ymap = build_maps(structure, asr.eta)
+            # Compression intervals shorter than the basis half-period 2a/M
+            # (2b/N) put metric content beyond the representable bandwidth --
+            # aliased operators and an unstable numerical lead stage. The Li
+            # inverse-rule PRODUCTS double the bandwidth need, hence the extra
+            # factor 2 (measured on a staircased eps=80 disk: max column-energy
+            # error 1.1e-3 at 2a/M vs 1e-6 at 4a/M).
+            self._xmap, self._ymap = build_maps(
+                structure,
+                asr.eta,
+                min_x=4.0 * structure.waveguide.a / M,
+                min_y=4.0 * structure.waveguide.b / N,
+            )
             self._patterns = None  # built lazily (import kept local to _lead)
         self._maybe_recommend_asr()
 

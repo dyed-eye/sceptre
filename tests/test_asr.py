@@ -156,7 +156,9 @@ def test_high_contrast_without_asr_warns():
 @pytest.mark.unit
 def test_no_warning_with_asr_or_low_contrast():
     with warnings.catch_warnings():
-        warnings.simplefilter("error")
+        # only the contrast recommendation is under test; at very small N the
+        # (legitimate) ASR edge-thinning warning may fire independently
+        warnings.filterwarnings("error", message=".*contrast.*")
         Solver(_block_structure(80.0), M=1, N=8, asr=AsrConfig())
         Solver(_block_structure(9.0), M=1, N=8)
 
@@ -173,3 +175,81 @@ def test_build_maps_collects_edges():
     assert xmap.identity  # full-width block: no interior x-edges
     assert not ymap.identity
     assert np.any(np.isclose(ymap.breaks, EDGE, rtol=1e-12))
+
+
+# ------------------------------------------- dense-edge (staircase) robustness
+#
+# A staircased curved shape puts interior edges every ~pixel; the map then
+# oscillates eta <-> 2-eta between every pair, pushing metric content beyond the
+# basis bandwidth (aliasing) and destabilizing the numerical lead-mode stage
+# (observed: port-column energies up to 3.5 on a staircased eps=80 disk).
+# Edges closer than the basis can resolve must not become compression points.
+
+
+def _staircase_disk(a: float, r: float, h: float, eps: complex, k: int,
+                    cy_off: float = 0.0):
+    """K x-strip staircase of a cylinder (axis || z) in an a x a guide; cy_off
+    shifts the centre in y (a wall-touching disk creates near-coincident edges,
+    the worst case for the ASR map)."""
+    boxes = []
+    cy = a / 2 + cy_off
+    xs = np.linspace(-r, r, k + 1)
+    for x1, x2 in zip(xs[:-1], xs[1:]):
+        half = r * r - (0.5 * (x1 + x2)) ** 2
+        if half <= 0:
+            continue
+        half = np.sqrt(half)
+        boxes.append(
+            Box(a / 2 + x1, a / 2 + x2, max(cy - half, 0.0), min(cy + half, a),
+                0.0, h, eps)
+        )
+    return Structure(Waveguide(a, a), boxes)
+
+
+@pytest.mark.unit
+def test_map_min_interval_thins_dense_edges():
+    dense = list(np.arange(0.05, 1.0, 0.02))
+    amap = AsrMap1D(1.0, dense, eta=0.3, min_interval=0.1)
+    gaps = np.diff(amap.breaks)
+    assert gaps.min() >= 0.1 - 1e-12
+    assert amap.breaks[0] == 0.0 and amap.breaks[-1] == 1.0
+    # back-compat: min_interval=0 keeps every edge
+    full = AsrMap1D(1.0, dense, eta=0.3)
+    assert len(full.breaks) == len(dense) + 2
+
+
+@pytest.mark.unit
+def test_map_all_edges_dropped_degrades_to_identity():
+    amap = AsrMap1D(1.0, [0.3, 0.4, 0.5], eta=0.3, min_interval=0.9)
+    assert amap.identity
+    assert amap.dropped == 3
+    u = np.linspace(0.0, 1.0, 11)
+    assert np.allclose(amap.x(u), u)
+    assert np.allclose(amap.dx(u), 1.0)
+
+
+@pytest.mark.unit
+def test_build_maps_thins_and_warns_on_staircase():
+    struct = _staircase_disk(0.032, 15e-3, 5e-3, 80.0, 32)
+    with pytest.warns(UserWarning, match="thinned"):
+        xmap, ymap = build_maps(struct, eta=0.3, min_x=0.032 / 8, min_y=0.032 / 8)
+    assert np.diff(xmap.breaks).min() >= 0.032 / 8 - 1e-12
+    assert np.diff(ymap.breaks).min() >= 0.032 / 8 - 1e-12
+    # sparse-edge structures are untouched and silent
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        _, ymap_block = build_maps(_block_structure(80.0), eta=0.3,
+                                   min_x=2 * A, min_y=B / 12)
+    assert np.any(np.isclose(ymap_block.breaks, EDGE, rtol=1e-12))
+
+
+def test_asr_staircase_disk_stays_unitary():
+    """Regression: eps=80 staircased wall-touching disk, the exact config that
+    produced port-column energies of 2.5-3.5 at 5.700 GHz before edge thinning."""
+    struct = _staircase_disk(0.032, 15e-3, 5e-3, 80.0, 32, cy_off=1e-3)
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore")
+        res = Solver(struct, M=16, N=16, asr=AsrConfig(eta=0.3)).smatrix(5.700e9)
+    sp = res.port_smatrix()
+    energies = np.sum(np.abs(sp) ** 2, axis=0)
+    assert np.max(np.abs(energies - 1.0)) < 1e-3, energies
