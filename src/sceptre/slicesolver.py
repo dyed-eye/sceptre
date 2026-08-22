@@ -64,6 +64,13 @@ def build_fg(
     at half size.  Only valid for an x-symmetric layout (the discarded
     cross-parity blocks are zero there); ASR operators are not supported.
     """
+    if ops.exy is not None and (
+        ops.mxx is not None or ops.myy is not None or ops.mzz is not None
+    ):
+        raise ValueError(
+            "exy transverse coupling cannot be combined with ASR metric "
+            "operators (mu~); tensor factorizations and ASR are exclusive"
+        )
     if sector is None:
         dx_ZX, dx_XZ = basis.dx_ZX, basis.dx_XZ
         dy_ZY, dy_YZ = basis.dy_ZY, basis.dy_YZ
@@ -100,6 +107,9 @@ def build_fg(
         g12 = -dy_WX @ mzz_inv @ dx_YW / k0
         g21 = -dx_WY @ mzz_inv @ dy_XW / k0
         g22 = k0 * ops.eyy + dx_WY @ mzz_inv @ dx_YW / k0
+    if ops.exy is not None:
+        g12 = g12 + k0 * ops.exy
+        g21 = g21 + k0 * ops.exy.T
     G = 1j * np.block([[g11, g12], [g21, g22]])
     return F, G
 

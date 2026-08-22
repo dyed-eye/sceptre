@@ -81,8 +81,7 @@ def test_sectored_matches_full_smatrix(solvers):
 def test_sectored_matches_full_direct_factorization():
     struct = symmetric_structure()
     s_full = Solver(struct, M=5, N=5, factorization="direct").smatrix(F0)
-    s_sect = Solver(struct, M=5, N=5, factorization="direct",
-                    symmetry="x").smatrix(F0)
+    s_sect = Solver(struct, M=5, N=5, factorization="direct", symmetry="x").smatrix(F0)
     a, b = s_full.smatrix.full(), s_sect.smatrix.full()
     assert np.max(np.abs(a - b)) < 1e-9 * np.max(np.abs(a))
 
@@ -138,6 +137,35 @@ def test_sectored_m1_empty_z_sector_matches():
     s_full = Solver(struct, M=1, N=4).smatrix(F0).smatrix.full()
     s_sect = Solver(struct, M=1, N=4, symmetry="x").smatrix(F0).smatrix.full()
     assert np.max(np.abs(s_full - s_sect)) < 1e-9 * np.max(np.abs(s_full))
+
+
+def test_sectored_build_fg_slices_exy_blocks():
+    """A mirror-commuting exy couples only equal m-parity classes; the sectored
+    G must equal the full G restricted to the sector, cross blocks zero."""
+    from sceptre.fourier import EpsOperators, build_eps_operators
+    from sceptre.slicesolver import build_fg
+
+    basis = ModeBasis(A, B, 5, 4)
+    centered = Box(0.25 * A, 0.75 * A, 0.0, 0.6 * B, 0.0, 0.004, 4.0)
+    layout = Structure(Waveguide(A, B), [centered]).segments()[0].cross_section
+    ops0 = build_eps_operators(layout, basis, "li")
+
+    m_x, _ = basis.X.mn()
+    m_y, _ = basis.Y.mn()
+    rng = np.random.default_rng(3)
+    exy = rng.normal(size=(basis.X.size, basis.Y.size)) * (
+        (m_x[:, None] % 2) == (m_y[None, :] % 2)
+    )
+    ops = EpsOperators(exx=ops0.exx, eyy=ops0.eyy, ezz=ops0.ezz, exy=exy + 0j)
+    k0 = 2 * np.pi * 15e9 / 299792458.0
+    _F, G = build_fg(ops, basis, k0)
+    odd, even = x_sectors(basis)
+    for sec in (odd, even):
+        _Fs, Gs = build_fg(ops, basis, k0, sec)
+        ix = np.ix_(sec.t, sec.t)
+        assert np.allclose(Gs, G[ix], atol=1e-13 * np.max(np.abs(G)))
+    cross = G[np.ix_(odd.t, even.t)]
+    assert np.max(np.abs(cross)) < 1e-13 * np.max(np.abs(G))
 
 
 def test_require_x_symmetric_accepts_staircase_roundoff():

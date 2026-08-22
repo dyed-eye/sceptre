@@ -1,16 +1,23 @@
-"""Geometry description: rectangular PEC waveguide with axis-aligned dielectric boxes.
+"""Geometry description: rectangular PEC waveguide with dielectric obstacles.
 
-The structure is staircase-sliced along z into segments on which the permittivity
-layout epsilon(x, y) is z-uniform.  Only piecewise-constant (box) obstacles are
-supported; a smoothly varying epsilon(z) must be staircased by the caller into boxes.
+Obstacles are axis-aligned boxes and/or level-set Shapes (shapes.py) whose
+exact-interval staircases are folded in automatically.  The structure is
+staircase-sliced along z into segments on which the permittivity layout
+epsilon(x, y) is z-uniform; each Segment carries the Shapes covering its
+z-interval (the routing data for tensor factorizations).  A smoothly varying
+epsilon(z) must be staircased by the caller into boxes/shapes along z.
 """
 
 from __future__ import annotations
 
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:  # shapes.py imports Box from here; annotation-only reverse dep
+    from .shapes import Shape
 
 _GEOM_TOL = 1e-12  # relative tolerance for merging coincident breakpoints
 
@@ -85,11 +92,17 @@ class CrossSection:
 
 @dataclass(frozen=True)
 class Segment:
-    """One z-uniform slice of the structure."""
+    """One z-uniform slice of the structure.
+
+    shapes: the Shape objects whose z-extent covers this segment — the
+    routing data tensor factorizations (nvf/kfj) dispatch on; empty for
+    box-only structures.
+    """
 
     z1: float
     z2: float
     cross_section: CrossSection
+    shapes: tuple[Shape, ...] = ()
 
     @property
     def length(self) -> float:
@@ -107,9 +120,11 @@ class Structure:
     waveguide: Waveguide
     boxes: Sequence[Box] = ()
     background: complex = 1.0 + 0.0j
+    shapes: Sequence[Shape] = field(default=(), kw_only=True)
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "boxes", tuple(self.boxes))
+        object.__setattr__(self, "shapes", tuple(self.shapes))
         if self.background == 0:
             raise ValueError("background permittivity must be nonzero (vacuum is 1)")
         a, b = self.waveguide.a, self.waveguide.b
@@ -118,26 +133,40 @@ class Structure:
                 raise ValueError(f"box exceeds waveguide in x: {box}")
             if box.y1 < -_GEOM_TOL * b or box.y2 > b * (1 + _GEOM_TOL):
                 raise ValueError(f"box exceeds waveguide in y: {box}")
+        for shape in self.shapes:
+            x1, x2, y1, y2 = shape.bbox
+            if x2 < -_GEOM_TOL * a or x1 > a * (1 + _GEOM_TOL):
+                raise ValueError(f"shape lies outside the waveguide in x: {shape}")
+            if y2 < -_GEOM_TOL * b or y1 > b * (1 + _GEOM_TOL):
+                raise ValueError(f"shape lies outside the waveguide in y: {shape}")
 
     @property
     def z_span(self) -> tuple[float, float]:
         """z-extent of the obstacle region (structure faces = port reference planes)."""
-        if not self.boxes:
-            raise ValueError("structure has no boxes; z-span undefined")
-        return (min(b.z1 for b in self.boxes), max(b.z2 for b in self.boxes))
+        z1s = [b.z1 for b in self.boxes] + [s.z1 for s in self.shapes]
+        z2s = [b.z2 for b in self.boxes] + [s.z2 for s in self.shapes]
+        if not z1s:
+            raise ValueError("structure has no boxes or shapes; z-span undefined")
+        return (min(z1s), max(z2s))
 
     def segments(self) -> list[Segment]:
         """Slice the structure into z-uniform segments between consecutive z-breakpoints."""
         z_lo, z_hi = self.z_span
         breaks = _merge_breakpoints(
-            [z_lo, z_hi] + [b.z1 for b in self.boxes] + [b.z2 for b in self.boxes],
+            [z_lo, z_hi]
+            + [z for b in self.boxes for z in (b.z1, b.z2)]
+            + [z for s in self.shapes for z in (s.z1, s.z2)],
             scale=max(abs(z_hi - z_lo), 1.0),
         )
+        stairs = {s: tuple(s.staircase(self.waveguide)) for s in self.shapes}
         segments = []
         for z1, z2 in zip(breaks[:-1], breaks[1:]):
             z_mid = 0.5 * (z1 + z2)
             active = [b for b in self.boxes if b.z1 <= z_mid <= b.z2]
-            segments.append(Segment(z1, z2, self._layout(active)))
+            active_shapes = tuple(s for s in self.shapes if s.z1 <= z_mid <= s.z2)
+            for s in active_shapes:
+                active.extend(stairs[s])
+            segments.append(Segment(z1, z2, self._layout(active), active_shapes))
         return segments
 
     def _layout(self, active_boxes: Sequence[Box]) -> CrossSection:

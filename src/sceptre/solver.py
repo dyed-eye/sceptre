@@ -22,11 +22,14 @@ import numpy as np
 from .asr import AsrConfig, build_asr_operators, build_maps
 from .basis import ModeBasis
 from .fourier import EpsOperators, build_eps_operators
-from .geometry import CrossSection, Structure
+from .geometry import CrossSection, Segment, Structure
+from .kfj import KfjConfig, build_kfj_operators
+from .nvf import NvfConfig, build_nvf_operators
 from .modes import LeadModes, lead_modes
 from .slicesolver import solve_slice
 from .smatrix import SMatrix, cascade, interface_smatrix, propagation_smatrix
 from .symmetry import Sector, lead_columns, require_x_symmetric, x_sectors
+from .threads import blas_thread_limit
 
 C0 = 299792458.0  # vacuum speed of light, m/s
 
@@ -86,9 +89,39 @@ class Solver:
         lead_eps: complex | None = None,
         asr: AsrConfig | None = None,
         symmetry: str | None = None,
+        blas_threads: int | None = None,
+        nvf: NvfConfig | None = None,
+        kfj: KfjConfig | None = None,
     ):
-        if factorization not in ("li", "direct"):
+        if factorization not in ("li", "direct", "nvf", "kfj"):
             raise ValueError(f"unknown factorization {factorization!r}")
+        if blas_threads is not None and blas_threads < 1:
+            raise ValueError("blas_threads must be >= 1 (or None to leave BLAS alone)")
+        self.blas_threads = blas_threads
+        if nvf is not None and factorization != "nvf":
+            raise ValueError("an NvfConfig requires factorization='nvf'")
+        if kfj is not None and factorization != "kfj":
+            raise ValueError("a KfjConfig requires factorization='kfj'")
+        if factorization in ("nvf", "kfj"):
+            if asr is not None:
+                raise ValueError(
+                    f"factorization='{factorization}' is not supported together "
+                    "with ASR (exclusive treatments of the same boundaries)"
+                )
+            if not structure.shapes:
+                raise ValueError(
+                    f"factorization='{factorization}' needs Shape geometry "
+                    "(e.g. Cylinder) — a box staircase carries no normal field"
+                )
+            if structure.boxes:
+                raise ValueError(
+                    "mixed boxes + shapes are not supported with tensor "
+                    "factorizations: outside the shape windows plain box edges "
+                    "would lose Li's inverse rule (a Rectangle shape is the "
+                    "planned path for box-like geometry)"
+                )
+        self.nvf_config = nvf or (NvfConfig() if factorization == "nvf" else None)
+        self.kfj_config = kfj or (KfjConfig() if factorization == "kfj" else None)
         if asr is not None and factorization != "li":
             raise ValueError("ASR requires factorization='li'")
         if symmetry not in (None, "x"):
@@ -108,6 +141,14 @@ class Solver:
         self.symmetry = symmetry
         self._sectors: tuple[Sector, Sector] | None = None
         if symmetry == "x":
+            a = structure.waveguide.a
+            for shape in structure.shapes:
+                bx1, bx2, _y1, _y2 = shape.bbox
+                if abs(0.5 * (bx1 + bx2) - 0.5 * a) > 1e-9 * a:
+                    raise ValueError(
+                        f"symmetry='x' needs x-centred shapes; {shape} is not "
+                        "mirror-symmetric about a/2"
+                    )
             for seg in self.segments:
                 require_x_symmetric(seg.cross_section, structure.waveguide.a)
             self._sectors = x_sectors(self.basis)
@@ -126,19 +167,31 @@ class Solver:
                 min_y=4.0 * structure.waveguide.b / N,
             )
             self._patterns = None  # built lazily (import kept local to _lead)
-        self._maybe_recommend_asr()
+        self._maybe_recommend_high_contrast_cure()
 
-    def _maybe_recommend_asr(self) -> None:
+    def _maybe_recommend_high_contrast_cure(self) -> None:
+        if self.factorization in ("nvf", "kfj"):
+            return
         mags = [abs(self.lead_eps)] + [
             abs(v) for seg in self.segments for v in seg.cross_section.eps_cells.ravel()
         ]
         contrast = max(mags) / min(mags)
         if self.asr is None and contrast >= ASR_RECOMMEND_CONTRAST:
+            if self.structure.shapes:
+                hint = (
+                    "this structure has curved Shape geometry: "
+                    "factorization='nvf' reaches the converged line position "
+                    "at N ~ 16-20 in one solve where plain Li needs an "
+                    "N-ladder plus Richardson extrapolation"
+                )
+            else:
+                hint = (
+                    "consider Solver(..., asr=AsrConfig()) or verify "
+                    "convergence by increasing N"
+                )
             warnings.warn(
                 f"permittivity contrast {contrast:.0f} is high: the plain Li "
-                "factorization converges slowly here (percent-level at N ~ 40 "
-                "for eps ~ 80). Consider Solver(..., asr=AsrConfig()) or verify "
-                "convergence by increasing N.",
+                f"factorization converges slowly here — {hint}.",
                 UserWarning,
                 stacklevel=3,
             )
@@ -174,8 +227,50 @@ class Solver:
                 )
         return self._ops_cache[key]
 
+    def _ops_for(self, seg: Segment) -> EpsOperators | None:
+        """Per-segment operator dispatch.  Tensor factorizations route shape
+        segments to their builders; shape-free segments in a shapes-only
+        structure are uniform background (analytic path, ops None)."""
+        if self.factorization not in ("nvf", "kfj"):
+            return self._segment_ops(seg.cross_section)
+        if not seg.shapes:
+            return None
+        config = self.nvf_config if self.factorization == "nvf" else self.kfj_config
+        key = (
+            seg.cross_section.key(),
+            self.factorization,
+            config,
+            tuple(id(s) for s in seg.shapes),  # Structure is fixed for the
+            # Solver's lifetime, so id() is a safe per-instance identity and
+            # imposes no hashability requirement on user Shape subclasses
+        )
+        if key not in self._ops_cache:
+            if self.factorization == "nvf":
+                ops = build_nvf_operators(
+                    seg.shapes,
+                    seg.cross_section,
+                    self.structure.waveguide,
+                    self.basis,
+                    self.nvf_config,
+                )
+            else:
+                ops = build_kfj_operators(
+                    seg.shapes,
+                    seg.cross_section,
+                    self.structure.waveguide,
+                    self.basis,
+                    self.kfj_config,
+                    background=self.structure.background,
+                )
+            self._ops_cache[key] = ops
+        return self._ops_cache[key]
+
     def smatrix(self, freq: complex) -> SResult:
         """Total S-matrix at frequency freq [Hz] (complex allowed for continuation)."""
+        with blas_thread_limit(self.blas_threads):
+            return self._smatrix_impl(freq)
+
+    def _smatrix_impl(self, freq: complex) -> SResult:
         k0 = 2.0 * np.pi * freq / C0
         lead = self._lead(k0)
         if self._sectors is None:
@@ -211,7 +306,7 @@ class Solver:
                 self.basis,
                 k0,
                 self.factorization,
-                ops=self._segment_ops(seg.cross_section),
+                ops=self._ops_for(seg),
                 sector=sector,
             )
             parts.append(interface_smatrix(prev_W, prev_V, modes.W, modes.V))

@@ -72,13 +72,18 @@ def lead_columns(labels: list[tuple[str, int, int]], sector: Sector) -> np.ndarr
 
 
 def slice_eps_ops(ops: EpsOperators, sector: Sector) -> EpsOperators:
-    """Restrict the eps operators to one sector (mu~ operators unsupported: ASR)."""
+    """Restrict the eps operators to one sector (mu~ operators unsupported: ASR).
+
+    exy (X rows, Y cols) slices rectangularly; a mirror-commuting exy couples
+    only equal m-parity classes, so the discarded cross blocks are zero.
+    """
     if ops.mxx is not None or ops.myy is not None or ops.mzz is not None:
         raise ValueError("sector slicing does not support ASR metric operators")
     return EpsOperators(
         exx=ops.exx[np.ix_(sector.X, sector.X)],
         eyy=ops.eyy[np.ix_(sector.Y, sector.Y)],
         ezz=ops.ezz[np.ix_(sector.Z, sector.Z)],
+        exy=None if ops.exy is None else ops.exy[np.ix_(sector.X, sector.Y)],
     )
 
 

@@ -109,12 +109,42 @@ def _cos_overlap_fill(Mmax: int, a: float, x1: float, x2: float) -> np.ndarray:
     return out
 
 
+@njit(cache=True)
+def _cos_sin_overlap_fill(Mmax: int, a: float, x1: float, x2: float) -> np.ndarray:
+    """Mixed overlaps CS[m, m'-1] = integral_{x1}^{x2} c_m(x) s_m'(x) dx (exact).
+
+    m = 0..Mmax (orthonormal cos), m' = 1..Mmax (orthonormal sin).  Needed by
+    the eps_xy coupling block of tensor/NVF factorizations: X-space rows
+    (cos_m s_n) against Y-space columns (s_m' cos_n').
+    """
+    out = np.empty((Mmax + 1, Mmax))
+    pia = np.pi / a
+    for m in range(0, Mmax + 1):
+        nm = np.sqrt((1.0 if m == 0 else 2.0) / a)
+        for mp in range(1, Mmax + 1):
+            nmp = np.sqrt(2.0 / a)
+            al, be = m * pia, mp * pia
+            if m == mp:
+                val = (np.cos(2 * al * x1) - np.cos(2 * al * x2)) / (4 * al)
+            else:
+                s, d = al + be, be - al
+                val = (np.cos(s * x1) - np.cos(s * x2)) / (2 * s) + (
+                    np.cos(d * x1) - np.cos(d * x2)
+                ) / (2 * d)
+            out[m, mp - 1] = nm * nmp * val
+    return out
+
+
 def sin_overlap(Mmax: int, a: float, x1: float, x2: float) -> np.ndarray:
     return _sin_overlap_fill(Mmax, a, float(x1), float(x2))
 
 
 def cos_overlap(Mmax: int, a: float, x1: float, x2: float) -> np.ndarray:
     return _cos_overlap_fill(Mmax, a, float(x1), float(x2))
+
+
+def cs_overlap(Mmax: int, a: float, x1: float, x2: float) -> np.ndarray:
+    return _cos_sin_overlap_fill(Mmax, a, float(x1), float(x2))
 
 
 @dataclass(frozen=True)
@@ -129,6 +159,10 @@ class EpsOperators:
     the smooth metric factors of the coordinate transformation:
     myy = mu~_y on X-space (H~y), mxx = mu~_x on Y-space (H~x),
     mzz = mu~_z on W-space (H~z; inverted for the Hz elimination).
+
+    exy is the off-diagonal transverse coupling (X-space rows, Y-space cols)
+    produced by tensor-valued factorizations (NVF, KFJ); None for the scalar
+    rules.  Its transpose acts as eyx, keeping G = G^T structural.
     """
 
     exx: np.ndarray
@@ -137,6 +171,7 @@ class EpsOperators:
     mxx: np.ndarray | None = None
     myy: np.ndarray | None = None
     mzz: np.ndarray | None = None
+    exy: np.ndarray | None = None
 
 
 def build_eps_operators(

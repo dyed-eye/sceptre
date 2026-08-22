@@ -14,7 +14,9 @@ dielectric obstacles, with numerically stable **S-matrix cascading**, complex-fr
 
 - **Geometry.** Rectangular guide, cross-section a x b, PEC walls, axis z. Obstacles
   are axis-aligned boxes of piecewise-constant complex permittivity ε (μ = 1, loss
-  allowed as Im ε > 0), staircase-sliced into z-uniform segments.
+  allowed as Im ε > 0), staircase-sliced into z-uniform segments — plus a level-set
+  **Shape layer** (`Cylinder`, subclassable) that carries exact staircases AND the
+  boundary normal fields needed by the tensor factorizations.
 - **Basis.** Vector modes of the empty guide built from sin/cos functions that satisfy
   the PEC conditions exactly (the image/mirror extension of the Fourier basis). The
   formulation is fully vectorial: TE and TM families couple through the obstacle.
@@ -40,6 +42,15 @@ dielectric obstacles, with numerically stable **S-matrix cascading**, complex-fr
   (~37x cheaper eigensolve at equal accuracy); FEM-verified to 0.13%.  The solver
   emits a recommendation warning when the permittivity contrast exceeds ~25 and
   ASR is off.
+- **NVF for high-contrast curved shapes.** `Solver(..., factorization="nvf")`
+  applies the inverse rule along a windowed boundary NORMAL field (Popov–Nevière
+  fast Fourier factorization, symmetrized so S = Sᵀ and unitarity stay structural).
+  Measured on the eps = 80 benchmark disk: the resonance line lands within
+  **±5 MHz of the FEM/VNA reference at N = 20 in one solve**, where plain Li is
+  +92 MHz at N = 24 and needs an N-ladder + Richardson extrapolation (~40× more
+  compute) for the same accuracy. A KFJ subpixel-smoothing factorization
+  (`"kfj"`) ships alongside for cross-method comparison, with its measured
+  high-contrast limitation documented.
 
 Conventions (time convention, normalization, port definitions): `refs/CONVENTIONS.md`.
 Validation status: analytic cases at machine precision; unitarity/reciprocity at
@@ -82,18 +93,17 @@ print(found.summary())                         # zeros & poles of det S
 
 ## Performance essentials
 
-The single biggest lever, worth ~10× on a typical desktop: **set BLAS threads to
-4 before numpy first loads**. The cascade algebra is dominated by LAPACK LU calls
-(`inv`/`solve`), and OpenBLAS at its default thread count *thrashes* on the
-matrix sizes SCEPTRE produces (measured on a 16-core laptop with OpenBLAS: a
-312×312 inversion takes 217 ms at 16 threads, 10 ms at 4). Setting the env var
-later, or inside a worker process after `import numpy`, silently does nothing:
+The single biggest lever, worth ~10× on a typical desktop: **cap the BLAS
+thread count** (~4 on OpenBLAS at these matrix sizes — measured: a 312×312
+inversion takes 217 ms at 16 threads, 10 ms at 4). Env vars only work BEFORE
+numpy first loads (a silent no-op afterwards); the runtime API works anytime:
 
 ```python
-import os
-os.environ.setdefault("OPENBLAS_NUM_THREADS", "4")   # FIRST, before numpy
-import numpy as np
-from sceptre import Solver
+import sceptre
+sceptre.set_blas_threads(sceptre.recommended_blas_threads())   # anytime
+# or per solver:  Solver(..., blas_threads=4)
+# or, zero-dependency, BEFORE numpy loads (e.g. in sweep workers):
+#   import os; os.environ.setdefault("OPENBLAS_NUM_THREADS", "4")
 ```
 
 Measured per-frequency costs after this fix (same 16-core laptop, 4 threads):
@@ -113,7 +123,8 @@ about x = a/2 (centred disks and staircases) can pass
 `Solver(..., symmetry="x")` — the modal problem splits into two independent
 half-size parity sectors, one per port polarization, with bit-identical S
 (1e-13). The ε = 80 disk above drops to 3.9 s/pt at N = 24 and 15 s/pt at
-N = 32. See USAGE §7.
+N = 32. Third lever, when the shape is smooth and the contrast high:
+`factorization="nvf"` replaces the whole N-ladder with one N ≈ 20 solve.
 
 ## Sanity checks that catch real bugs
 
@@ -126,22 +137,37 @@ N = 32. See USAGE §7.
   a mirrored geometry must equal the enantiomer transform M·S·M, M = diag(1,−1).
   These cost one solve each and validate the whole geometry/mode plumbing.
 
-More field-tested recipes — parallel sweeps, staircasing curved and rotated
-shapes, ASR vs plain Li at high contrast, N-ladders, comparing against other
-solvers or measurements, pole-based resonance extraction — in
-[docs/USAGE.md](docs/USAGE.md).
+## Documentation
+
+Full docs (absolute links so they work from PyPI):
+
+| | |
+|---|---|
+| [Method](https://github.com/dyed-eye/sceptre/blob/main/docs/method.md) | basis, eigenproblem, factorization, cascading, conventions, poles |
+| [Geometry](https://github.com/dyed-eye/sceptre/blob/main/docs/geometry.md) | boxes, staircases, the Shape/Cylinder level-set layer |
+| [Factorizations](https://github.com/dyed-eye/sceptre/blob/main/docs/factorizations.md) | li / direct / ASR / NVF / KFJ + the measured use-case matrix |
+| [Performance](https://github.com/dyed-eye/sceptre/blob/main/docs/performance.md) | BLAS threads, parallel sweeps, symmetry, N-ladders, memory |
+| [Comparisons](https://github.com/dyed-eye/sceptre/blob/main/docs/comparisons.md) | cross-solver/measurement protocol, pole-based resonance extraction |
+| [API](https://github.com/dyed-eye/sceptre/blob/main/docs/api.md) | every public symbol |
+
+Start at [docs/index.md](https://github.com/dyed-eye/sceptre/blob/main/docs/index.md).
 
 ## Package layout
 
 ```
 src/sceptre/
-  geometry.py     boxes, z-slicing, cross-section layouts
+  geometry.py     boxes, shapes-aware z-slicing, cross-section layouts
+  shapes.py       level-set Shape base + Cylinder (staircase + normal field)
   basis.py        sin/cos component spaces, exact derivative operators
   fourier.py      overlap matrices; Li vs direct (Laurent) eps operators
+  nvf.py          normal-vector-field factorization (high-contrast curves)
+  kfj.py          KFJ subpixel smoothing (comparison tool; see docs)
   modes.py        analytic TE/TM lead modes (ports), flux normalization
-  slicesolver.py  per-slice symmetric F/G operators, zgeev eigenproblem
+  slicesolver.py  per-slice symmetric F/G operators (incl. eps_xy), zgeev
+  symmetry.py     x-mirror parity sectorization (symmetry="x")
   smatrix.py      interface/propagation S-matrices, Redheffer star cascade
-  solver.py       top-level Solver / SResult API
+  solver.py       top-level Solver / SResult API, factorization dispatch
+  threads.py      runtime BLAS thread control (threadpoolctl)
   poles.py        contour pole/zero finder (argument principle + moments + Newton)
   ep.py           EP Newton (double-root system) + Puiseux confirmation
   asr.py          adaptive spatial resolution: maps, quadrature Grams, eps~/mu~ ops
@@ -168,12 +194,20 @@ src/sceptre/
 8. G. Granet, JOSA A **16**, 2510 (1999); T. Vallius & M. Honkanen, Opt. Express
    **10**, 24 (2002) — adaptive spatial resolution; A. J. Ward & J. B. Pendry,
    J. Mod. Opt. **43**, 773 (1996) — coordinate transforms as materials.
-9. T. Itoh (ed.), *Numerical Techniques for Microwave and Millimeter-Wave Passive
-   Structures*, Wiley (1989) — closed-guide mode matching, overlap/normalization
-   conventions.
+9. E. Popov & M. Nevière, JOSA A **17**, 1773 (2000); T. Schuster et al.,
+   JOSA A **24**, 2880 (2007) — fast Fourier factorization along normal
+   vector fields (the NVF factorization).
+10. A. F. Oskooi, C. Kottke, S. G. Johnson, Opt. Lett. **34**, 2778 (2009);
+    C. Kottke, A. Farjadpour, S. G. Johnson, PRE **77**, 036611 (2008) —
+    anisotropic subpixel smoothing (the KFJ factorization; see
+    docs/factorizations.md for why it does not transfer to spectral bases).
+11. T. Itoh (ed.), *Numerical Techniques for Microwave and Millimeter-Wave
+    Passive Structures*, Wiley (1989) — closed-guide mode matching,
+    overlap/normalization conventions.
 
 ## License
 
-MIT (see [LICENSE](LICENSE)). Clean-room implementation: structural inspiration
+MIT (see [LICENSE](https://github.com/dyed-eye/sceptre/blob/main/LICENSE)).
+Clean-room implementation: structural inspiration
 (not code) from grcwa/torcwa; EP methodology cross-checked against the EasterEig
 approach; no code ported from GPL-encumbered packages (S4, RETICOLO).

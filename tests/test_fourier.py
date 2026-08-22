@@ -5,8 +5,15 @@ import pytest
 from scipy.integrate import quad
 
 from sceptre.basis import ModeBasis
-from sceptre.fourier import build_eps_operators, cos_overlap, sin_overlap
+from sceptre.fourier import (
+    EpsOperators,
+    build_eps_operators,
+    cos_overlap,
+    cs_overlap,
+    sin_overlap,
+)
 from sceptre.geometry import Box, Structure, Waveguide
+from sceptre.slicesolver import build_fg
 
 A, B = 0.02286, 0.01016  # WR-90
 
@@ -88,6 +95,71 @@ def test_li_equals_direct_when_x_uniform():
     assert np.allclose(li.exx, direct.exx, atol=1e-12)
     # ... but the inverse rule along y must differ (that is the whole point):
     assert not np.allclose(li.eyy, direct.eyy, atol=1e-6)
+
+
+@pytest.mark.unit
+def test_cs_overlap_matches_quadrature():
+    x1, x2 = 0.2 * A, 0.83 * A
+    CS = cs_overlap(4, A, x1, x2)
+    for m in range(0, 5):
+        for mp in range(1, 5):
+            ref, _ = quad(lambda x: _cos_fn(m, A)(x) * _sin_fn(mp, A)(x), x1, x2)
+            assert CS[m, mp - 1] == pytest.approx(ref, abs=1e-14)
+
+
+@pytest.mark.unit
+def test_cs_overlap_full_interval_parity_pattern():
+    """Over [0, a] the cos-sin overlap vanishes iff m + m' is even.
+
+    The exact odd-parity VALUES are subsumed by
+    test_cs_overlap_matches_quadrature (1e-14 abs vs scipy quad on a
+    sub-interval); this test pins the structural selection rule."""
+    CS = cs_overlap(6, A, 0.0, A)
+    for m in range(0, 7):
+        for mp in range(1, 7):
+            if (m + mp) % 2 == 0:
+                assert abs(CS[m, mp - 1]) < 1e-14
+            else:
+                assert abs(CS[m, mp - 1]) > 1e-3
+
+
+@pytest.mark.unit
+def test_build_fg_exy_coupling_placement_and_symmetry():
+    basis = ModeBasis(A, B, 4, 4)
+    layout = _partial_block_structure().segments()[0].cross_section
+    ops0 = build_eps_operators(layout, basis, "li")
+    rng = np.random.default_rng(7)
+    exy = rng.normal(size=(basis.X.size, basis.Y.size)) + 1j * rng.normal(
+        size=(basis.X.size, basis.Y.size)
+    )
+    ops = EpsOperators(exx=ops0.exx, eyy=ops0.eyy, ezz=ops0.ezz, exy=exy)
+    k0 = 2 * np.pi * 12e9 / 299792458.0
+    F0, G0 = build_fg(ops0, basis, k0)
+    F, G = build_fg(ops, basis, k0)
+    assert np.allclose(F, F0)  # F never sees the transverse eps coupling
+    nx = basis.X.size
+    delta = (G - G0) / (1j * k0)
+    assert np.allclose(delta[:nx, nx:], exy, atol=1e-13)
+    assert np.allclose(delta[nx:, :nx], exy.T, atol=1e-13)
+    assert np.allclose(delta[:nx, :nx], 0.0, atol=1e-13)
+    # complex-symmetric G is structural reciprocity — must survive the coupling
+    scale = np.max(np.abs(G))
+    assert np.max(np.abs(G - G.T)) < 1e-13 * scale
+
+
+@pytest.mark.unit
+def test_build_fg_rejects_exy_with_asr_metric_operators():
+    basis = ModeBasis(A, B, 3, 3)
+    eye_w = np.eye((basis.M + 1) * (basis.N + 1), dtype=complex)
+    ops = EpsOperators(
+        exx=np.eye(basis.X.size, dtype=complex),
+        eyy=np.eye(basis.Y.size, dtype=complex),
+        ezz=np.eye(basis.Z.size, dtype=complex),
+        mzz=eye_w,
+        exy=np.zeros((basis.X.size, basis.Y.size), dtype=complex),
+    )
+    with pytest.raises(ValueError, match="exy"):
+        build_fg(ops, basis, 500.0)
 
 
 @pytest.mark.unit
