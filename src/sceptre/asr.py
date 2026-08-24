@@ -51,7 +51,7 @@ import numpy as np
 
 from .basis import ModeBasis
 from .fourier import EpsOperators
-from .geometry import CrossSection, Structure
+from .geometry import CrossSection, StructureLike
 
 _EDGE_MERGE_TOL = 1e-9  # relative tolerance for merging coincident edges
 
@@ -137,7 +137,7 @@ class AsrMap1D:
 
 
 def build_maps(
-    structure: Structure, eta: float, min_x: float = 0.0, min_y: float = 0.0
+    structure: StructureLike, eta: float, min_x: float = 0.0, min_y: float = 0.0
 ) -> tuple[AsrMap1D, AsrMap1D]:
     """One shared map per direction from the union of edges over ALL segments
     (all slices must live in the same u, v coordinates for trivial interface

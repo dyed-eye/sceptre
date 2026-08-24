@@ -28,9 +28,39 @@ Immutable scene description; `segments()` slices it into z-uniform
 `Segment`s (each carrying its covering `shapes`). `z_span` gives the port
 reference planes. `shapes` is keyword-only.
 
-### `CrossSection` / `Segment`
+### `SegmentedStructure(waveguide, segments, background=1.0)`
+A structure given directly as z-uniform `Segment`s rather than derived from
+boxes — the route for explicitly graded ε maps
+([inverse-design.md](inverse-design.md)). Interchangeable with `Structure`
+(at runtime and under a type checker) except under `nvf`/`kfj`, which need
+`Shape` geometry. Also exposes `z_span`.
+
+Segments must be non-empty, each of positive z-extent and finite bounds, and
+contiguous in increasing z — the cascade walks them in order using only each
+segment's length, so a gap or overlap would otherwise be silently mis-modelled.
+The join tolerance scales with the shorter adjacent segment (plus a floor for
+coordinate round-off), so it does not lose sensitivity for structures far from
+the origin.
+
+### `StructureLike`
+The `Protocol` describing what the solver reads off a structure: `waveguide`,
+`background`, `boxes`, `shapes`, and `segments()`. `Solver` and the ASR map
+builder are annotated with it, so `Structure`, `SegmentedStructure`, and any
+custom structure satisfying those five members type-check at every call site.
+
+### `CrossSection(x_edges, y_edges, eps_cells)` / `Segment`
 The rectilinear ε layout of one z-uniform slice, and the slice itself
-(`z1`, `z2`, `cross_section`, `shapes`). Produced by `Structure.segments()`.
+(`z1`, `z2`, `cross_section`, `shapes`). Produced by `Structure.segments()`, and
+constructible directly for explicitly graded ε maps
+([inverse-design.md](inverse-design.md)).
+
+Validated on construction: `eps_cells.shape` must be
+`(len(x_edges) - 1, len(y_edges) - 1)`, edges real, finite and strictly
+increasing, every cell finite and nonzero. Edges and cells are normalised to
+float/complex arrays, **copied, and stored read-only** (a frozen dataclass alone
+would not stop in-place mutation of a validated layout). `Solver` additionally
+requires every segment's cross-section to span the full guide (`[0, a] × [0, b]`)
+— a partial map would otherwise solve silently against undefined geometry.
 
 ## Solving
 

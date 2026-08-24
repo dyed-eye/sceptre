@@ -22,7 +22,7 @@ import numpy as np
 from .asr import AsrConfig, build_asr_operators, build_maps
 from .basis import ModeBasis
 from .fourier import EpsOperators, build_eps_operators
-from .geometry import CrossSection, Segment, Structure
+from .geometry import CrossSection, Segment, StructureLike, Waveguide
 from .kfj import KfjConfig, build_kfj_operators
 from .nvf import NvfConfig, build_nvf_operators
 from .modes import LeadModes, lead_modes
@@ -37,6 +37,39 @@ C0 = 299792458.0  # vacuum speed of light, m/s
 # truncation order for percent-level accuracy (measured: eps = 80 still ~1% at
 # N = 40); recommend ASR instead of failing silently slowly.
 ASR_RECOMMEND_CONTRAST = 25.0
+
+# Relative; cross-section edges must reach both PEC walls. Deliberately 1000x
+# looser than geometry._GEOM_TOL: that one merges internally-computed
+# breakpoints, this one validates caller-supplied grids, which accumulate more
+# round-off. Still orders of magnitude below any physical feature size.
+_SPAN_TOL = 1e-9
+
+
+def _require_spanning_sections(
+    segments: Sequence[Segment], waveguide: Waveguide
+) -> None:
+    """Every cross-section must tile the whole guide cross-section.
+
+    Structure builds layouts seeded with [0, a] x [0, b], so this only bites on
+    explicitly supplied grids (docs/inverse-design.md), where a map covering
+    part of the guide otherwise leaves the remainder undefined and solves
+    silently against the wrong geometry."""
+    a, b = waveguide.a, waveguide.b
+    for seg in segments:
+        cs = seg.cross_section
+        if (
+            abs(cs.x_edges[0]) > _SPAN_TOL * a
+            or abs(cs.x_edges[-1] - a) > _SPAN_TOL * a
+            or abs(cs.y_edges[0]) > _SPAN_TOL * b
+            or abs(cs.y_edges[-1] - b) > _SPAN_TOL * b
+        ):
+            raise ValueError(
+                f"cross-section of the segment at z = [{seg.z1:g}, {seg.z2:g}] "
+                f"must span the full guide: x_edges span "
+                f"[{cs.x_edges[0]:g}, {cs.x_edges[-1]:g}] and y_edges span "
+                f"[{cs.y_edges[0]:g}, {cs.y_edges[-1]:g}], expected "
+                f"[0, {a:g}] x [0, {b:g}]"
+            )
 
 
 @dataclass(frozen=True)
@@ -82,7 +115,7 @@ class Solver:
 
     def __init__(
         self,
-        structure: Structure,
+        structure: StructureLike,
         M: int,
         N: int,
         factorization: str = "li",
@@ -135,6 +168,7 @@ class Solver:
             lead_eps if lead_eps is not None else structure.background
         )
         self.segments = structure.segments()
+        _require_spanning_sections(self.segments, structure.waveguide)
         # Fixed for the object's lifetime: _lead/_segment_ops and the ops cache
         # assume it never changes after construction.
         self.asr = asr

@@ -58,25 +58,14 @@ is for devices that are legitimately smooth.
 
 ## Expressing a graded ε map
 
-`Structure` derives its segments from boxes and shapes. To supply an explicit ε
-grid, build `CrossSection`/`Segment` directly and pass them through a small
-adapter — `Solver` only requires `.waveguide`, `.background`, `.segments()`, plus
-`.boxes`/`.shapes` (read only by the tensor factorizations and the symmetry
-check):
+`Structure` derives its segments by staircasing boxes and shapes. To supply an
+explicit ε grid instead, build `CrossSection`/`Segment` directly and hand them to
+`SegmentedStructure`, which is interchangeable with `Structure` everywhere except
+the tensor factorizations (those need `Shape` geometry):
 
 ```python
 import numpy as np
-from sceptre import CrossSection, Segment, Solver, Waveguide
-
-class GridStructure:
-    """Minimal structure adapter for an explicit permittivity grid."""
-    def __init__(self, waveguide, segments, background=1.0 + 0.0j):
-        self.waveguide, self.background = waveguide, background
-        self.boxes, self.shapes = (), ()
-        self._segments = list(segments)
-
-    def segments(self):
-        return list(self._segments)
+from sceptre import CrossSection, Segment, SegmentedStructure, Solver, Waveguide
 
 a = b = 0.032
 xe, ye = np.linspace(0, a, 97), np.linspace(0, b, 97)
@@ -86,13 +75,31 @@ X, Y = np.meshgrid(xm, ym, indexing="ij")
 fill = 0.5 + 0.4 * np.cos(2 * np.pi * X / a) * np.cos(2 * np.pi * Y / b)  # band-limited
 eps = (1.0 + (7.0 - 1.0) * fill).astype(complex)
 
-struct = GridStructure(Waveguide(a, b), [Segment(0.0, 0.015, CrossSection(xe, ye, eps))])
+struct = SegmentedStructure(
+    Waveguide(a, b), [Segment(0.0, 0.015, CrossSection(xe, ye, eps))]
+)
 s = Solver(struct, M=8, N=8, factorization="li").smatrix(5.85e9)
 ```
 
-*(A first-class constructor for explicit-segment structures would be a natural
-addition; today the adapter above is the supported route, and its contract is the
-four attributes listed.)*
+Stack slices by listing more segments; they must be contiguous and in increasing
+z, because the cascade walks the list in order and uses only each segment's
+length — a gap would otherwise be silently omitted from the structure, an
+overlap silently double-counted. `SegmentedStructure` rejects all three.
+
+`CrossSection` validates itself on construction — cell-array shape against the
+edge counts, strictly increasing real edges, and every cell finite and nonzero —
+and `Solver` checks that each cross-section spans the full guide. Every one of
+those was a silent wrong answer before this path was documented, so build the map
+however you like, but expect a `ValueError` naming the offending index rather
+than a plausible-looking spectrum.
+
+The finiteness check earns its place here specifically: a mixing law such as
+f = ln ε / ln ε_solid diverges as ε_solid → 1, and a *uniform* map of non-finite
+ε takes the analytic fast path, which skips the linear algebra that would
+otherwise complain — it used to return `S = NaN` with no error at all.
+
+The stored arrays are copies and are read-only, so a candidate map cannot be
+corrupted after validation by the optimiser reusing its buffer.
 
 ## Constraints
 

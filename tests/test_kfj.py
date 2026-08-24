@@ -55,7 +55,7 @@ def test_kfj_fill_fractions_recover_disk_area():
     cyl = Cylinder(CX, CY, R, 0.0, H, 80.0 + 0j)
     xe, ye, exx, eyy, exy, ezz = kfj_cells((cyl,), WG, KfjConfig(cells=96))
     areas = np.outer(np.diff(xe), np.diff(ye))
-    fills = (ezz.real - 1.0) / (80.0 - 1.0)
+    fills = (np.real(ezz) - 1.0) / (80.0 - 1.0)
     disk_area = float(np.sum(fills * areas))
     assert disk_area == pytest.approx(np.pi * R * R, rel=1e-3)
 

@@ -66,9 +66,9 @@ analytic path.
 ## Explicit permittivity grids
 
 Boxes and shapes both end up as a `CrossSection` — a rectilinear grid of per-cell
-ε. You can also build that grid yourself and hand the solver `Segment`s directly,
-which is what continuously graded (non-binary) media require; see
-[inverse-design.md](inverse-design.md) for the adapter, the convergence payoff,
+ε. You can also build that grid yourself and pass the resulting `Segment`s to
+`SegmentedStructure`, which is what continuously graded (non-binary) media
+require; see [inverse-design.md](inverse-design.md) for the convergence payoff
 and the constraints.
 
 ## Tolerance and Monte-Carlo studies: fix the grid to the guide

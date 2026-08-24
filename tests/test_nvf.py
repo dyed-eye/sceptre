@@ -240,5 +240,5 @@ def test_lossy_eps_assembly_keeps_complex_dtype():
     layout = Structure(WG, shapes=[cyl]).segments()[0].cross_section
     basis = ModeBasis(A_WG, A_WG, 6, 6)
     ops = build_nvf_operators((cyl,), layout, WG, basis, NvfConfig())
-    assert np.max(np.abs(ops.ezz.imag)) > 0
-    assert np.max(np.abs(ops.exx.imag)) > 0
+    assert np.max(np.abs(np.imag(ops.ezz))) > 0
+    assert np.max(np.abs(np.imag(ops.exx))) > 0

@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
 
@@ -70,6 +70,67 @@ class CrossSection:
     x_edges: np.ndarray  # shape (nx+1,), x_edges[0] = 0, x_edges[-1] = a
     y_edges: np.ndarray  # shape (ny+1,)
     eps_cells: np.ndarray  # complex, shape (nx, ny)
+
+    def __post_init__(self) -> None:
+        # Structure guarantees these by construction, but a CrossSection built
+        # directly (an explicitly graded eps map -- docs/inverse-design.md) can
+        # violate every one of them, and each violation used to solve silently.
+        # copy=True is load-bearing: np.asarray returns the CALLER's array when
+        # the dtype already matches, and a frozen dataclass only blocks
+        # rebinding, not in-place mutation -- so a validated layout could be
+        # corrupted afterwards (and its ops-cache key silently changed).
+        if np.iscomplexobj(self.x_edges) or np.iscomplexobj(self.y_edges):
+            # numpy would only raise a (default-suppressed) ComplexWarning and
+            # silently drop the imaginary part.
+            raise ValueError("x_edges and y_edges must be real")
+        x = np.array(self.x_edges, dtype=float, copy=True)
+        y = np.array(self.y_edges, dtype=float, copy=True)
+        eps = np.array(self.eps_cells, dtype=complex, copy=True)
+        if x.ndim != 1 or y.ndim != 1 or x.size < 2 or y.size < 2:
+            raise ValueError(
+                "x_edges and y_edges must be 1-D with at least two entries"
+            )
+        if eps.shape != (x.size - 1, y.size - 1):
+            raise ValueError(
+                f"eps_cells has shape {eps.shape}, expected "
+                f"{(x.size - 1, y.size - 1)} from {x.size} x-edges and "
+                f"{y.size} y-edges"
+            )
+        # Before the ordering/zero tests: NaN compares False against everything,
+        # so it would pass both. A uniform layout of non-finite eps then takes
+        # the analytic fast path (no scipy check_finite) and returns a NaN
+        # S-matrix with no error at all -- e.g. a mixing law such as
+        # ln(eps)/ln(eps_solid) diverging at eps_solid -> 1.
+        for name, edges in (("x_edges", x), ("y_edges", y)):
+            if not np.all(np.isfinite(edges)):
+                bad = int(np.argmax(~np.isfinite(edges)))
+                raise ValueError(
+                    f"{name} must be finite (no NaN or inf): {name}[{bad}] = "
+                    f"{edges[bad]}"
+                )
+            if np.any(np.diff(edges) <= 0):
+                bad = int(np.argmax(np.diff(edges) <= 0))
+                raise ValueError(
+                    f"{name} must be strictly increasing: {name}[{bad}] = "
+                    f"{edges[bad]:g} is followed by {edges[bad + 1]:g}"
+                )
+        if not np.all(np.isfinite(eps)):
+            i, j = (int(v) for v in np.argwhere(~np.isfinite(eps))[0])
+            raise ValueError(
+                f"cell permittivity must be finite (no NaN or inf): "
+                f"eps_cells[{i}, {j}] = {eps[i, j]}"
+            )
+        if np.any(eps == 0):
+            i, j = (int(v) for v in np.argwhere(eps == 0)[0])
+            raise ValueError(
+                f"cell permittivity must be nonzero (vacuum is 1): "
+                f"eps_cells[{i}, {j}] = 0"
+            )
+        for arr in (x, y, eps):
+            arr.setflags(write=False)
+        object.__setattr__(self, "x_edges", x)
+        object.__setattr__(self, "y_edges", y)
+        object.__setattr__(self, "eps_cells", eps)
 
     @property
     def is_uniform(self) -> bool:
@@ -196,3 +257,102 @@ def _merge_breakpoints(values: list[float], scale: float) -> np.ndarray:
         if v - merged[-1] > _GEOM_TOL * scale:
             merged.append(v)
     return np.asarray(merged)
+
+
+# Segment joins are checked against the SHORTER neighbouring segment (so
+# sensitivity tracks the physical feature size, never the distance from the
+# origin), with a floor for the float64 representation slack of the z
+# coordinates themselves -- otherwise a structure at large z would reject its
+# own exactly-abutting segments over last-bit rounding.
+_JOIN_TOL = 1e-9
+_COORD_TOL = 1e-12
+
+
+class StructureLike(Protocol):
+    """What the solver reads off a structure.
+
+    Members are read-only properties so that concrete types may narrow them
+    (a tuple where the protocol says Sequence). Annotate solver-facing
+    parameters with this rather than the concrete Structure, so alternative
+    structures type-check at call sites.
+    """
+
+    @property
+    def waveguide(self) -> Waveguide: ...
+
+    @property
+    def background(self) -> complex: ...
+
+    @property
+    def boxes(self) -> Sequence[Box]: ...
+
+    @property
+    def shapes(self) -> Sequence[Shape]: ...
+
+    def segments(self) -> list[Segment]: ...
+
+
+# A plain class, not a frozen dataclass like its neighbours: `segments` has to
+# be a METHOD to match Structure's interface, which would collide with a
+# dataclass field of the same name.
+class SegmentedStructure:
+    """A structure given directly as z-uniform segments, not derived from boxes.
+
+    The route for continuously graded permittivity (docs/inverse-design.md),
+    where the cross-sections are built from an explicit eps map rather than by
+    staircasing solids.  Offers the same read contract the solver uses, so it is
+    interchangeable with Structure everywhere except the tensor factorizations,
+    which need Shape geometry.
+
+    Treat as immutable once handed to a Solver: the solver captures segments at
+    construction and caches operators per cross-section identity.
+    """
+
+    def __init__(
+        self,
+        waveguide: Waveguide,
+        segments: Sequence[Segment],
+        background: complex = 1.0 + 0.0j,
+    ):
+        segs = tuple(segments)
+        if background == 0:
+            raise ValueError("background permittivity must be nonzero (vacuum is 1)")
+        if not segs:
+            raise ValueError("a structure needs at least one segment")
+        for seg in segs:
+            # inf survives the extent test below (inf > 0 is True) and then
+            # poisons propagation_smatrix, whose overflow guard computes
+            # -Im(beta)*d = 0*inf = NaN and never fires: S came back all NaN
+            # with no error.
+            if not (np.isfinite(seg.z1) and np.isfinite(seg.z2)):
+                raise ValueError(f"segment bounds must be finite: [{seg.z1}, {seg.z2}]")
+            if not seg.z2 > seg.z1:
+                raise ValueError(
+                    f"segment must have positive z-extent: [{seg.z1:g}, {seg.z2:g}]"
+                )
+        # Solver._cascade walks this list in order and uses only seg.length, so
+        # a gap is silently omitted, an overlap double-counted, and a
+        # mis-ordered list cascaded in the wrong order -- all without an error.
+        for prev, nxt in zip(segs[:-1], segs[1:]):
+            feature = min(prev.z2 - prev.z1, nxt.z2 - nxt.z1)
+            coord = max(abs(prev.z2), abs(nxt.z1))
+            tol = max(_JOIN_TOL * feature, _COORD_TOL * coord)
+            if abs(nxt.z1 - prev.z2) > tol:
+                raise ValueError(
+                    "segments must be contiguous and in increasing z order: "
+                    f"segment ending at z = {prev.z2:g} is followed by one "
+                    f"starting at z = {nxt.z1:g}"
+                )
+        self.waveguide = waveguide
+        self.background = complex(background)
+        self.boxes: tuple[Box, ...] = ()
+        self.shapes: tuple[Shape, ...] = ()
+        self._segments = segs
+
+    @property
+    def z_span(self) -> tuple[float, float]:
+        """z-extent of the structure (faces = port reference planes)."""
+        return (self._segments[0].z1, self._segments[-1].z2)
+
+    def segments(self) -> list[Segment]:
+        return list(self._segments)
