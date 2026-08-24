@@ -22,7 +22,7 @@ import numpy as np
 from .asr import AsrConfig, build_asr_operators, build_maps
 from .basis import ModeBasis
 from .fourier import EpsOperators, build_eps_operators
-from .geometry import CrossSection, Segment, StructureLike, Waveguide
+from .geometry import CrossSection, Segment, Structure, Waveguide
 from .kfj import KfjConfig, build_kfj_operators
 from .nvf import NvfConfig, build_nvf_operators
 from .modes import LeadModes, lead_modes
@@ -115,7 +115,7 @@ class Solver:
 
     def __init__(
         self,
-        structure: StructureLike,
+        structure: Structure,
         M: int,
         N: int,
         factorization: str = "li",

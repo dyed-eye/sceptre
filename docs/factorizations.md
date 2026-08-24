@@ -122,9 +122,6 @@ Curved shapes at high contrast — smooth OR sharp-cornered — → `nvf` (the
 solver's high-contrast warning will point you there when it applies; the
 generic level-set normal field handles corners, measured on the sharp
 crescent). ASR → high-contrast *blocks* with few edges. `direct` → never
-(benchmarks only). `kfj` → cross-method comparison studies only.
-
-A device whose permittivity is *physically* graded (printed infill, porous or
-composite fill) is a different situation entirely, and the one case where smooth
-ε is a genuine advantage rather than a modelling error — see
-[inverse-design.md](inverse-design.md).
+(benchmarks only). `kfj` → cross-method comparison studies only. A
+*physically* graded ε is the one case where smoothness helps rather than
+misleads — [inverse-design.md](inverse-design.md).

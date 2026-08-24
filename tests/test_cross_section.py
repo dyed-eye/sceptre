@@ -20,20 +20,6 @@ def _edges(n=8):
     return np.linspace(0.0, A, n + 1), np.linspace(0.0, B, n + 1)
 
 
-class _GridStructure:
-    """The adapter documented in docs/inverse-design.md."""
-
-    def __init__(self, waveguide, segments, background=1.0 + 0.0j):
-        self.waveguide = waveguide
-        self.background = background
-        self.boxes = ()
-        self.shapes = ()
-        self._segments = list(segments)
-
-    def segments(self):
-        return list(self._segments)
-
-
 def test_cross_section_rejects_eps_cells_shape_mismatch():
     xe, ye = _edges()
     with pytest.raises(ValueError, match="eps_cells"):
@@ -157,7 +143,7 @@ def test_solver_rejects_cross_section_not_spanning_the_guide():
     xe = np.linspace(0.0, A / 2, 9)
     ye = np.linspace(0.0, B, 9)
     cs = CrossSection(xe, ye, np.full((8, 8), 4.0 + 0j))
-    struct = _GridStructure(Waveguide(A, B), [Segment(0.0, 0.01, cs)])
+    struct = Structure.from_segments(Waveguide(A, B), [Segment(0.0, 0.01, cs)])
     with pytest.raises(ValueError, match="span"):
         Solver(struct, M=4, N=4)
 
@@ -166,7 +152,7 @@ def test_solver_rejects_cross_section_not_starting_at_the_wall():
     xe = np.linspace(0.001, A + 0.001, 9)
     ye = np.linspace(0.0, B, 9)
     cs = CrossSection(xe, ye, np.full((8, 8), 4.0 + 0j))
-    struct = _GridStructure(Waveguide(A, B), [Segment(0.0, 0.01, cs)])
+    struct = Structure.from_segments(Waveguide(A, B), [Segment(0.0, 0.01, cs)])
     with pytest.raises(ValueError, match="span"):
         Solver(struct, M=4, N=4)
 
@@ -177,7 +163,7 @@ def test_solver_rejects_cross_section_not_spanning_the_guide_in_y():
     xe = np.linspace(0.0, A, 9)
     ye = np.linspace(0.0, B / 2, 9)
     cs = CrossSection(xe, ye, np.full((8, 8), 4.0 + 0j))
-    struct = _GridStructure(Waveguide(A, B), [Segment(0.0, 0.01, cs)])
+    struct = Structure.from_segments(Waveguide(A, B), [Segment(0.0, 0.01, cs)])
     with pytest.raises(ValueError, match="span"):
         Solver(struct, M=4, N=4)
 
@@ -186,7 +172,7 @@ def test_solver_rejects_cross_section_not_starting_at_the_wall_in_y():
     xe = np.linspace(0.0, A, 9)
     ye = np.linspace(0.001, B + 0.001, 9)
     cs = CrossSection(xe, ye, np.full((8, 8), 4.0 + 0j))
-    struct = _GridStructure(Waveguide(A, B), [Segment(0.0, 0.01, cs)])
+    struct = Structure.from_segments(Waveguide(A, B), [Segment(0.0, 0.01, cs)])
     with pytest.raises(ValueError, match="span"):
         Solver(struct, M=4, N=4)
 
@@ -194,7 +180,7 @@ def test_solver_rejects_cross_section_not_starting_at_the_wall_in_y():
 def test_solver_accepts_a_spanning_graded_structure():
     xe, ye = _edges(16)
     cs = CrossSection(xe, ye, np.full((16, 16), 4.0 + 0j))
-    struct = _GridStructure(Waveguide(A, B), [Segment(0.0, 0.01, cs)])
+    struct = Structure.from_segments(Waveguide(A, B), [Segment(0.0, 0.01, cs)])
     res = Solver(struct, M=4, N=4).smatrix(5.85e9)
     assert np.isfinite(res.smatrix.s11).all()
 

@@ -9,15 +9,7 @@ Conventions: refs/CONVENTIONS.md (e^{-i omega t}; Im eps > 0 lossy; forward e^{+
 
 from .asr import AsrConfig
 from .basis import ModeBasis
-from .geometry import (
-    Box,
-    CrossSection,
-    Segment,
-    SegmentedStructure,
-    Structure,
-    StructureLike,
-    Waveguide,
-)
+from .geometry import Box, CrossSection, Segment, Structure, Waveguide
 from .kfj import KfjConfig
 from .modes import LeadModes, lead_modes
 from .nvf import NvfConfig
@@ -42,10 +34,8 @@ __all__ = [
     "Shape",
     "SResult",
     "Segment",
-    "SegmentedStructure",
     "Solver",
     "Structure",
-    "StructureLike",
     "Waveguide",
     "blas_thread_limit",
     "cascade",

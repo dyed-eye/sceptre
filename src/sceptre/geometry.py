@@ -12,7 +12,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Protocol
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -182,6 +182,55 @@ class Structure:
     boxes: Sequence[Box] = ()
     background: complex = 1.0 + 0.0j
     shapes: Sequence[Shape] = field(default=(), kw_only=True)
+    # Set only by from_segments(); None means "derive the slicing from boxes".
+    _given: tuple[Segment, ...] | None = field(
+        default=None, init=False, repr=False, compare=False
+    )
+
+    @classmethod
+    def from_segments(
+        cls,
+        waveguide: Waveguide,
+        segments: Sequence[Segment],
+        background: complex = 1.0 + 0.0j,
+    ) -> Structure:
+        """Build from explicit z-uniform slices instead of staircasing boxes.
+
+        The route for a permittivity map given cell by cell (a graded medium);
+        see docs/inverse-design.md.  Segments must be finite, of positive
+        z-extent, and contiguous in increasing z: the cascade walks them in
+        order using only each segment's length, so a gap would be dropped from
+        the model and an overlap counted twice.
+        """
+        segs = tuple(segments)
+        if not segs:
+            raise ValueError("a structure needs at least one segment")
+        for seg in segs:
+            # inf survives the extent test (inf > 0) and then poisons
+            # propagation_smatrix, whose overflow guard computes
+            # -Im(beta)*d = 0*inf = NaN and never fires.
+            if not (np.isfinite(seg.z1) and np.isfinite(seg.z2)):
+                raise ValueError(f"segment bounds must be finite: [{seg.z1}, {seg.z2}]")
+            if not seg.z2 > seg.z1:
+                raise ValueError(
+                    f"segment must have positive z-extent: [{seg.z1:g}, {seg.z2:g}]"
+                )
+        for prev, nxt in zip(segs[:-1], segs[1:]):
+            # Tolerance tracks the shorter neighbour, never the distance from
+            # the origin, with a floor for the round-off of the z values.
+            tol = max(
+                _JOIN_TOL * min(prev.z2 - prev.z1, nxt.z2 - nxt.z1),
+                _COORD_TOL * max(abs(prev.z2), abs(nxt.z1)),
+            )
+            if abs(nxt.z1 - prev.z2) > tol:
+                raise ValueError(
+                    "segments must be contiguous and in increasing z order: "
+                    f"segment ending at z = {prev.z2:g} is followed by one "
+                    f"starting at z = {nxt.z1:g}"
+                )
+        obj = cls(waveguide, (), background)
+        object.__setattr__(obj, "_given", segs)
+        return obj
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "boxes", tuple(self.boxes))
@@ -204,6 +253,8 @@ class Structure:
     @property
     def z_span(self) -> tuple[float, float]:
         """z-extent of the obstacle region (structure faces = port reference planes)."""
+        if self._given is not None:
+            return (self._given[0].z1, self._given[-1].z2)
         z1s = [b.z1 for b in self.boxes] + [s.z1 for s in self.shapes]
         z2s = [b.z2 for b in self.boxes] + [s.z2 for s in self.shapes]
         if not z1s:
@@ -212,6 +263,8 @@ class Structure:
 
     def segments(self) -> list[Segment]:
         """Slice the structure into z-uniform segments between consecutive z-breakpoints."""
+        if self._given is not None:
+            return list(self._given)
         z_lo, z_hi = self.z_span
         breaks = _merge_breakpoints(
             [z_lo, z_hi]
@@ -266,93 +319,3 @@ def _merge_breakpoints(values: list[float], scale: float) -> np.ndarray:
 # own exactly-abutting segments over last-bit rounding.
 _JOIN_TOL = 1e-9
 _COORD_TOL = 1e-12
-
-
-class StructureLike(Protocol):
-    """What the solver reads off a structure.
-
-    Members are read-only properties so that concrete types may narrow them
-    (a tuple where the protocol says Sequence). Annotate solver-facing
-    parameters with this rather than the concrete Structure, so alternative
-    structures type-check at call sites.
-    """
-
-    @property
-    def waveguide(self) -> Waveguide: ...
-
-    @property
-    def background(self) -> complex: ...
-
-    @property
-    def boxes(self) -> Sequence[Box]: ...
-
-    @property
-    def shapes(self) -> Sequence[Shape]: ...
-
-    def segments(self) -> list[Segment]: ...
-
-
-# A plain class, not a frozen dataclass like its neighbours: `segments` has to
-# be a METHOD to match Structure's interface, which would collide with a
-# dataclass field of the same name.
-class SegmentedStructure:
-    """A structure given directly as z-uniform segments, not derived from boxes.
-
-    The route for continuously graded permittivity (docs/inverse-design.md),
-    where the cross-sections are built from an explicit eps map rather than by
-    staircasing solids.  Offers the same read contract the solver uses, so it is
-    interchangeable with Structure everywhere except the tensor factorizations,
-    which need Shape geometry.
-
-    Treat as immutable once handed to a Solver: the solver captures segments at
-    construction and caches operators per cross-section identity.
-    """
-
-    def __init__(
-        self,
-        waveguide: Waveguide,
-        segments: Sequence[Segment],
-        background: complex = 1.0 + 0.0j,
-    ):
-        segs = tuple(segments)
-        if background == 0:
-            raise ValueError("background permittivity must be nonzero (vacuum is 1)")
-        if not segs:
-            raise ValueError("a structure needs at least one segment")
-        for seg in segs:
-            # inf survives the extent test below (inf > 0 is True) and then
-            # poisons propagation_smatrix, whose overflow guard computes
-            # -Im(beta)*d = 0*inf = NaN and never fires: S came back all NaN
-            # with no error.
-            if not (np.isfinite(seg.z1) and np.isfinite(seg.z2)):
-                raise ValueError(f"segment bounds must be finite: [{seg.z1}, {seg.z2}]")
-            if not seg.z2 > seg.z1:
-                raise ValueError(
-                    f"segment must have positive z-extent: [{seg.z1:g}, {seg.z2:g}]"
-                )
-        # Solver._cascade walks this list in order and uses only seg.length, so
-        # a gap is silently omitted, an overlap double-counted, and a
-        # mis-ordered list cascaded in the wrong order -- all without an error.
-        for prev, nxt in zip(segs[:-1], segs[1:]):
-            feature = min(prev.z2 - prev.z1, nxt.z2 - nxt.z1)
-            coord = max(abs(prev.z2), abs(nxt.z1))
-            tol = max(_JOIN_TOL * feature, _COORD_TOL * coord)
-            if abs(nxt.z1 - prev.z2) > tol:
-                raise ValueError(
-                    "segments must be contiguous and in increasing z order: "
-                    f"segment ending at z = {prev.z2:g} is followed by one "
-                    f"starting at z = {nxt.z1:g}"
-                )
-        self.waveguide = waveguide
-        self.background = complex(background)
-        self.boxes: tuple[Box, ...] = ()
-        self.shapes: tuple[Shape, ...] = ()
-        self._segments = segs
-
-    @property
-    def z_span(self) -> tuple[float, float]:
-        """z-extent of the structure (faces = port reference planes)."""
-        return (self._segments[0].z1, self._segments[-1].z2)
-
-    def segments(self) -> list[Segment]:
-        return list(self._segments)

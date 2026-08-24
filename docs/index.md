@@ -11,7 +11,7 @@ S-matrix cascading and complex-frequency pole/zero location.
 | [geometry.md](geometry.md) | Boxes, staircasing curved shapes, the `Shape`/`Cylinder` level-set layer |
 | [factorizations.md](factorizations.md) | `li` / `direct` / ASR / NVF / KFJ — what each does and **when to use which** (the use-case matrix) |
 | [performance.md](performance.md) | BLAS threads (the 10× lever), parallel sweeps, `symmetry="x"`, N-ladders, memory budgets |
-| [inverse-design.md](inverse-design.md) | Band-limited (graded) permittivity as design variables: why a low truncation suffices, and the fabrication/loss/robustness constraints |
+| [inverse-design.md](inverse-design.md) | Graded (continuously varying) ε: `Structure.from_segments`, `CrossSection`, why smooth maps converge at low N, per-candidate cost |
 | [comparisons.md](comparisons.md) | Comparing against other solvers/measurements without fooling yourself; pole-based resonance extraction |
 | [api.md](api.md) | Every public symbol with signatures and examples |
 
