@@ -12,10 +12,16 @@ measurement to ±1 MHz).
 | | **Box-aligned** | **Smooth curved** (disks, fillets) | **Sharp-cornered** (notches, bare bar corners) |
 |---|---|---|---|
 | **Low contrast (ε ≲ 10)** | `li` (exact rules, exact geometry) | `li` on a staircase — simplest; all arms sub-percent by N = 12, `nvf` marginally faster (table below) | `li` on a staircase |
-| **High contrast (ε ≳ 25)** | `li`; ASR if few isolated edges (block benchmark: ASR at N = 24 ≈ plain at N ≈ 80) | **`nvf`** — one N = 20 solve lands −0.8 MHz from the reference; `li` needs an N = 24/32/40 ladder + Richardson for the same | `li` + N-ladder + Richardson (measured on the ε = 80 notched disk: line rungs +49/+29/+24 MHz → within 4 MHz). *NVF at corners is untested — extrapolation; corner-adapted normal fields are future work* |
+| **High contrast (ε ≳ 25)** | `li`; ASR if few isolated edges (block benchmark: ASR at N = 24 ≈ plain at N ≈ 80) | **`nvf`** — one N = 20 solve lands −0.8 MHz from the reference; `li` needs an N = 24/32/40 ladder + Richardson for the same | **`nvf`** — measured on the ε = 80 sharp-horned crescent: the N = 20 single solve lands 3 MHz from the `li` 3-rung Richardson anchor and N = 28 lands on it exactly (5.779 GHz); `li` raw at N = 24 was still +45 MHz. A generic level-set FD normal field suffices; no corner adaptation needed. |
 
-Cells marked with measurements cite them below; the sharp-corner/NVF cell
-is the ONLY extrapolation in this table and is labeled as such.
+Every cell in this table is backed by a measurement (the sharp-corner/NVF
+cell: `reports/comsol_parity/09_nvf_closure.md`, P-C).
+
+Away from the calibration band, expect a residual high-side bias that
+shrinks super-linearly with N (measured +4…+10 MHz at N = 28 in the
+5.7-5.85 GHz band vs pole-continued references). Because convergence is
+faster than 1/N, two-point p = 1 Richardson OVERSHOOTS on `nvf` series —
+quote single-N values with the rung drift as the uncertainty instead.
 
 ## `li` (default) — Li's exact rules on exact cells
 
@@ -112,8 +118,13 @@ on simplicity, not on a claimed accuracy edge it doesn't uniformly have.
 ## Selection logic in one paragraph
 
 Boxes → `li`. Curved shapes at low contrast → `li` on the staircase.
-Curved smooth shapes at high contrast → `nvf` (the solver's high-contrast
-warning will point you there when it applies). Sharp corners at high
-contrast → `li` + ladder + Richardson, until corner-adapted NVF exists.
-ASR → high-contrast *blocks* with few edges. `direct` → never (benchmarks
-only). `kfj` → cross-method comparison studies only.
+Curved shapes at high contrast — smooth OR sharp-cornered — → `nvf` (the
+solver's high-contrast warning will point you there when it applies; the
+generic level-set normal field handles corners, measured on the sharp
+crescent). ASR → high-contrast *blocks* with few edges. `direct` → never
+(benchmarks only). `kfj` → cross-method comparison studies only.
+
+A device whose permittivity is *physically* graded (printed infill, porous or
+composite fill) is a different situation entirely, and the one case where smooth
+ε is a genuine advantage rather than a modelling error — see
+[inverse-design.md](inverse-design.md).
