@@ -18,7 +18,8 @@ scattering-matrix poles, combined with Delves-Lyness moments):
 4. Newton refinement on f (zeros) or 1/f (poles) with a central finite-difference
    derivative, to ~rel_tol * scale accuracy.
 
-References:
+References
+----------
 * D. A. Bykov, L. L. Doskolovich, "Numerical methods for calculating poles of the
   scattering matrix with applications in grating theory," J. Lightwave Technol. 31,
   793 (2013); arXiv:1206.3388.
@@ -44,6 +45,8 @@ _TWO_PI_I = 2j * np.pi
 
 
 class ContourError(RuntimeError):
+    """A contour integral could not be trusted (root on the contour, no convergence)."""
+
     pass
 
 
@@ -53,10 +56,13 @@ class _EdgeOnRoot(Exception):
 
 @dataclass
 class PoleZeroResult:
+    """Zeros and poles found inside a contour."""
+
     zeros: list[complex] = field(default_factory=list)
     poles: list[complex] = field(default_factory=list)
 
     def summary(self) -> str:
+        """One-line listing of the zeros and poles."""
         z = ", ".join(f"{v:.6g}" for v in self.zeros)
         p = ", ".join(f"{v:.6g}" for v in self.poles)
         return f"zeros: [{z}]  poles: [{p}]"
@@ -178,7 +184,8 @@ def _contour_moments(f, rect, n_moments, budget, max_jitter=8):
                 total = 0.0 + 0.0j
                 moments = np.zeros(n_moments, dtype=complex)
                 cs = r.corners
-                for cache, (za, zb) in zip(caches, zip(cs, cs[1:] + cs[:1])):
+                corners = zip(cs, cs[1:] + cs[:1], strict=True)
+                for cache, (za, zb) in zip(caches, corners, strict=True):
                     dlog, mom = _edge_moments(
                         f, za, zb, n_moments, budget, n_seed, cache
                     )
@@ -277,6 +284,7 @@ def refine_pole(
     max_iter: int = 80,
     max_step: float | None = None,
 ) -> complex:
+    """Newton-refine a pole of f starting from `guess` (works on 1/f)."""
     return refine_zero(lambda z: 1.0 / f(z), guess, tol, max_iter, max_step)
 
 

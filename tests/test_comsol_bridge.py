@@ -64,6 +64,7 @@ def synthetic_comsol():
     return freqs, s11_port, s21_port
 
 
+@pytest.mark.integration
 def test_compare_passes_on_selfconsistent_data(synthetic_comsol, tmp_path):
     freqs, s11_port, s21_port = synthetic_comsol
     report = compare_sparams(
@@ -75,6 +76,7 @@ def test_compare_passes_on_selfconsistent_data(synthetic_comsol, tmp_path):
     assert len(report.plots) == 2  # overlay + deviation figures written
 
 
+@pytest.mark.unit
 def test_compare_fails_on_wrong_data(synthetic_comsol):
     freqs, s11_port, s21_port = synthetic_comsol
     report = compare_sparams(freqs, s11_port, 1.05 * s21_port, n_order=N_ORDER)

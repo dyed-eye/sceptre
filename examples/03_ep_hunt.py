@@ -19,7 +19,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from sceptre import Box, Structure, Solver, Waveguide
+from sceptre import Box, Solver, Structure, Waveguide
 from sceptre.ep import find_ep, pole_pair, puiseux_fit
 from sceptre.poles import find_zeros_poles, refine_pole
 

@@ -33,6 +33,8 @@ MAX_DF_RES = 1e-3  # resonance-frequency agreement < 0.1%
 
 @dataclass(frozen=True)
 class BenchmarkCase:
+    """One SCEPTRE/COMSOL cross-verification case (geometry, material, sweep)."""
+
     name: str
     eps_block: complex
     block_len: float
@@ -84,12 +86,14 @@ N_FREQ = STANDARD.n_freq
 
 
 def frequencies(case: BenchmarkCase = STANDARD) -> np.ndarray:
+    """Frequency grid of the benchmark case."""
     return np.linspace(case.f_min, case.f_max, case.n_freq)
 
 
 def sceptre_solver(
     n_order: int | None = None, case: BenchmarkCase = STANDARD
 ) -> Solver:
+    """SCEPTRE Solver configured for the benchmark case."""
     block = Box(0.0, A, 0.0, case.block_height, 0.0, case.block_len, case.eps_block)
     return Solver(
         Structure(Waveguide(A, B), [block]),

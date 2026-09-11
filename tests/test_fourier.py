@@ -34,7 +34,9 @@ def test_sin_overlap_matches_quadrature():
     S = sin_overlap(4, A, x1, x2)
     for m in range(1, 5):
         for mp in range(1, 5):
-            ref, _ = quad(lambda x: _sin_fn(m, A)(x) * _sin_fn(mp, A)(x), x1, x2)
+            ref, _ = quad(
+                lambda x, m=m, mp=mp: _sin_fn(m, A)(x) * _sin_fn(mp, A)(x), x1, x2
+            )
             assert S[m - 1, mp - 1] == pytest.approx(ref, abs=1e-14)
 
 
@@ -44,7 +46,9 @@ def test_cos_overlap_matches_quadrature():
     C = cos_overlap(4, A, x1, x2)
     for m in range(0, 5):
         for mp in range(0, 5):
-            ref, _ = quad(lambda x: _cos_fn(m, A)(x) * _cos_fn(mp, A)(x), x1, x2)
+            ref, _ = quad(
+                lambda x, m=m, mp=mp: _cos_fn(m, A)(x) * _cos_fn(mp, A)(x), x1, x2
+            )
             assert C[m, mp] == pytest.approx(ref, abs=1e-14)
 
 
@@ -103,7 +107,9 @@ def test_cs_overlap_matches_quadrature():
     CS = cs_overlap(4, A, x1, x2)
     for m in range(0, 5):
         for mp in range(1, 5):
-            ref, _ = quad(lambda x: _cos_fn(m, A)(x) * _sin_fn(mp, A)(x), x1, x2)
+            ref, _ = quad(
+                lambda x, m=m, mp=mp: _cos_fn(m, A)(x) * _sin_fn(mp, A)(x), x1, x2
+            )
             assert CS[m, mp - 1] == pytest.approx(ref, abs=1e-14)
 
 

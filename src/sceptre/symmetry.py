@@ -47,7 +47,7 @@ def _space_indices(space: Space, m_odd: bool) -> np.ndarray:
 
 
 def x_sectors(basis: ModeBasis) -> tuple[Sector, Sector]:
-    """The (odd-m, even-m) mirror sectors of a basis."""
+    """Return the (odd-m, even-m) mirror sectors of a basis."""
     sectors = []
     for m_odd in (True, False):
         xi = _space_indices(basis.X, m_odd)

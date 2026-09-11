@@ -29,8 +29,11 @@ from .shapes import Shape
 
 @dataclass(frozen=True)
 class KfjConfig:
-    """cells: grid cells across each shape's bbox span; supersample: points
-    per cell axis for fill fractions."""
+    """KFJ smoothing knobs.
+
+    cells: grid cells across each shape's bbox span; supersample: points per cell
+    axis for fill fractions.
+    """
 
     cells: int = 96
     supersample: int = 16
@@ -64,7 +67,8 @@ def kfj_cells(
     """(xe, ye, exx, eyy, exy, ezz) tensor cell arrays for the smoothed grid.
 
     background is the host permittivity the fill fractions mix against
-    (Structure.background — vacuum only by default)."""
+    (Structure.background — vacuum only by default).
+    """
     config = config or KfjConfig()
     bg = complex(background)
     xe, ye = _grid_edges(shapes, waveguide, config.cells)
@@ -119,8 +123,11 @@ def build_kfj_operators(
     config: KfjConfig | None = None,
     background: complex = 1.0 + 0.0j,
 ) -> EpsOperators:
-    """Assemble KFJ EpsOperators.  `layout` (the sharp staircase) is unused —
-    the smoothed grid REPLACES the staircase geometry by construction."""
+    """Assemble KFJ EpsOperators.
+
+    `layout` (the sharp staircase) is unused: the smoothed grid REPLACES the
+    staircase geometry by construction.
+    """
     del layout
     if not shapes:
         raise ValueError("KFJ needs at least one Shape (boxes carry no normals)")

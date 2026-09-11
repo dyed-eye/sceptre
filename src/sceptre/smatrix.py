@@ -26,6 +26,8 @@ import numpy as np
 
 @dataclass(frozen=True)
 class SMatrix:
+    """Two-port modal scattering matrix in s11/s12/s21/s22 blocks."""
+
     s11: np.ndarray
     s12: np.ndarray
     s21: np.ndarray
@@ -33,6 +35,7 @@ class SMatrix:
 
     @property
     def n(self) -> int:
+        """Number of modes per port."""
         return self.s11.shape[0]
 
     def full(self) -> np.ndarray:
@@ -41,6 +44,7 @@ class SMatrix:
 
 
 def identity_smatrix(n: int) -> SMatrix:
+    """S-matrix of a zero-length section (perfect transmission)."""
     z = np.zeros((n, n), dtype=complex)
     i = np.eye(n, dtype=complex)
     return SMatrix(z, i, i, z.copy())
@@ -100,6 +104,7 @@ def redheffer(A: SMatrix, B: SMatrix) -> SMatrix:
 
 
 def cascade(smatrices: list[SMatrix]) -> SMatrix:
+    """Redheffer star product of a list of S-matrices, left to right."""
     if not smatrices:
         raise ValueError("nothing to cascade")
     return reduce(redheffer, smatrices)

@@ -33,7 +33,8 @@ transformed transverse fields carry exactly one metric factor each, the plain
 coefficient flux e^T v EQUALS the physical pseudo-flux -- the ASR S-matrix is
 the physical S-matrix with no normalization gauge at all.
 
-References:
+References
+----------
 * G. Granet, "Reformulation of the lamellar grating problem through the
   concept of adaptive spatial resolution," JOSA A 16, 2510 (1999).
 * T. Vallius, M. Honkanen, "Reformulation of the Fourier modal method with
@@ -110,6 +111,7 @@ class AsrMap1D:
         # PEC walls (fields are smooth there) -- degrade to the identity map.
 
     def x(self, u):
+        """Map reference coordinate u to physical x(u)."""
         u = np.asarray(u, dtype=float)
         if self.identity:
             return u.copy()
@@ -124,6 +126,7 @@ class AsrMap1D:
         return out
 
     def dx(self, u):
+        """Metric factor dx/du at reference coordinate u (1 for the identity map)."""
         u = np.asarray(u, dtype=float)
         if self.identity:
             return np.ones_like(u)
@@ -139,8 +142,9 @@ class AsrMap1D:
 def build_maps(
     structure: Structure, eta: float, min_x: float = 0.0, min_y: float = 0.0
 ) -> tuple[AsrMap1D, AsrMap1D]:
-    """One shared map per direction from the union of edges over ALL segments
-    (all slices must live in the same u, v coordinates for trivial interface
+    """Build one shared map per direction from the union of edges over ALL segments.
+
+    All slices must live in the same u, v coordinates for trivial interface
     matching in the S-cascade).
 
     min_x / min_y thin edges denser than the caller's basis can resolve (see
@@ -212,8 +216,10 @@ def gauss_gram(kind: str, mmax: int, length: float, pieces) -> np.ndarray:
 
 
 def _refined_pieces(cell_edges: np.ndarray, map_breaks: np.ndarray):
-    """Partition refined by both the eps-cell edges and the map breakpoints
-    (the metric has derivative kinks at map breakpoints), tagged by cell index."""
+    """Partition refined by both the eps-cell edges and the map breakpoints.
+
+    The metric has derivative kinks at map breakpoints; intervals are tagged by cell index.
+    """
     merged = np.unique(np.round(np.concatenate([cell_edges, map_breaks]), 15))
     mids = 0.5 * (merged[:-1] + merged[1:])
     cell_of = np.clip(
@@ -267,7 +273,7 @@ def build_asr_operators(
             M,
             a,
             [
-                (u1, u2, lambda u, i=i: (1.0 / eps[i, j]) * xmap.dx(u))
+                (u1, u2, lambda u, i=i, j=j: (1.0 / eps[i, j]) * xmap.dx(u))
                 for u1, u2, i in px
             ],
         )
@@ -287,7 +293,7 @@ def build_asr_operators(
             N,
             b,
             [
-                (v1, v2, lambda v, j=j: (1.0 / eps[i, j]) * ymap.dx(v))
+                (v1, v2, lambda v, i=i, j=j: (1.0 / eps[i, j]) * ymap.dx(v))
                 for v1, v2, j in py
             ],
         )
@@ -303,8 +309,8 @@ def build_asr_operators(
     ezz = np.zeros((basis.Z.size, basis.Z.size), dtype=complex)
     sx_c = [gauss_gram("sin", M, a, [(u1, u2, xmap.dx)]) for u1, u2, _ in px]
     sy_c = [gauss_gram("sin", N, b, [(v1, v2, ymap.dx)]) for v1, v2, _ in py]
-    for k, (u1, u2, i) in enumerate(px):
-        for l, (v1, v2, j) in enumerate(py):  # noqa: E741
+    for k, (_, _, i) in enumerate(px):
+        for l, (_, _, j) in enumerate(py):  # noqa: E741
             ezz += eps[i, j] * np.kron(sx_c[k], sy_c[l])
 
     # -- mu~ components: smooth metric-only factors, direct rule --------------

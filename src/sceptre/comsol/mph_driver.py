@@ -1,5 +1,6 @@
-"""Drive COMSOL through MPh (https://mph.readthedocs.io): build the benchmark model,
-run the frequency sweep, return port-referenced S11/S21.
+"""Drive COMSOL through MPh (https://mph.readthedocs.io).
+
+Build the benchmark model, run the frequency sweep, return port-referenced S11/S21.
 
 The model: WR-90 guide with LEAD_LEN vacuum sections on both sides of the
 partial-height dielectric block, PEC walls (default exterior boundary condition of
@@ -26,6 +27,8 @@ def _eps_str(eps: complex) -> str:
 
 @dataclass(frozen=True)
 class ComsolSweep:
+    """Result of a COMSOL frequency sweep, phase-referenced at the ports."""
+
     freqs: np.ndarray
     s11_port: np.ndarray  # phase-referenced at the ports (lead ends)
     s21_port: np.ndarray

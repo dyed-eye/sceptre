@@ -24,6 +24,8 @@ DIP_THRESHOLD = 0.7  # |S21| below this counts as a resonance dip
 
 @dataclass
 class ComparisonReport:
+    """SCEPTRE-vs-COMSOL comparison on a shared frequency grid, with pass/fail limits."""
+
     freqs: np.ndarray
     s11_sceptre: np.ndarray
     s21_sceptre: np.ndarray
@@ -39,12 +41,14 @@ class ComparisonReport:
 
     @property
     def passed(self) -> bool:
+        """True when every deviation is inside the benchmark acceptance limits."""
         ok = self.max_ds11 < bm.MAX_DS and self.max_ds21 < bm.MAX_DS
         if self.max_res_shift is not None:
             ok = ok and self.max_res_shift < bm.MAX_DF_RES
         return ok
 
     def summary(self) -> str:
+        """Human-readable multi-line summary of the deviations and limits."""
         lines = [
             f"max |dS11| (off-resonance): {self.max_ds11:.4%}  (limit {bm.MAX_DS:.0%})",
             f"max |dS21| (off-resonance): {self.max_ds21:.4%}  (limit {bm.MAX_DS:.0%})",

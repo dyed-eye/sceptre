@@ -45,6 +45,7 @@ class LeadModes:
     kc2: np.ndarray  # (T,) cutoff wavenumbers squared
 
     def mode_index(self, kind: str, m: int, n: int) -> int:
+        """Flat index of the (kind, m, n) lead mode."""
         return self.labels.index((kind, m, n))
 
     def propagating(self, rel_tol: float = 1e-9) -> np.ndarray:
@@ -71,6 +72,7 @@ def mode_table(basis: ModeBasis) -> list[tuple[float, str, int, int]]:
 
 
 def lead_modes(basis: ModeBasis, k0: complex, eps: complex = 1.0 + 0.0j) -> LeadModes:
+    """Analytic TE/TM modes of the empty (or uniformly filled) guide at k0."""
     a, b = basis.a, basis.b
     T = basis.size_t
 

@@ -15,7 +15,7 @@ from .modes import LeadModes, lead_modes
 from .nvf import NvfConfig
 from .shapes import Cylinder, Shape
 from .smatrix import SMatrix, cascade, interface_smatrix, propagation_smatrix, redheffer
-from .solver import C0, SResult, Solver
+from .solver import C0, Solver, SResult
 from .threads import blas_thread_limit, recommended_blas_threads, set_blas_threads
 
 __version__ = "0.2.0"

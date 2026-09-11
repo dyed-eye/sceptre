@@ -49,6 +49,7 @@ dev = [
     "matplotlib>=3.8",
     "mph>=1.2",
     "pytest-cov>=7.1.0",
+    "basedpyright>=1.40.0",
 ]
 
 [build-system]
@@ -64,3 +65,26 @@ markers = [
     "unit: fast unit tests (mocked / analytic, no heavy solves)",
     "integration: slower physics tests (eigenproblems, contour searches)",
 ]
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "NPY", "D"]
+ignore = [
+    "E501",  # line length is enforced by `ruff format`; long strings/comments allowed
+    "D105",  # magic-method docstrings
+    "D107",  # __init__ docstrings (documented on the class)
+    "D203",  # one-blank-line-before-class (conflicts with D211)
+    "D213",  # multi-line-summary-second-line (conflicts with D212)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["D"]
+"examples/**" = ["D"]
+"scripts/**" = ["D"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"

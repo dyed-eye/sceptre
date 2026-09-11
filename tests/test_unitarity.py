@@ -26,18 +26,21 @@ def result():
     return solver.smatrix(18.0e9)  # several propagating modes
 
 
+@pytest.mark.unit
 def test_propagating_block_is_unitary(result):
     sp = result.port_smatrix()  # propagating modes only
     gram = sp.conj().T @ sp
     assert np.max(np.abs(gram - np.eye(sp.shape[0]))) < 1e-10
 
 
+@pytest.mark.unit
 def test_energy_conservation_row_sums(result):
     sp = result.port_smatrix()
     sums = np.sum(np.abs(sp) ** 2, axis=0)
     assert np.max(np.abs(sums - 1.0)) < 1e-10
 
 
+@pytest.mark.unit
 def test_reciprocity_full_smatrix(result):
     s = result.smatrix.full()
     denom = np.max(np.abs(s))

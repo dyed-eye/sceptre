@@ -62,7 +62,9 @@ deliberately kept out of version control.
 
 ```bash
 uv sync                     # install (Python >= 3.11, numpy/scipy/numba)
-uv run pytest -q            # full test suite
+uv run pytest -q -m unit    # fast tests (~1 min); drop `-m unit` for the physics suite
+uv run ruff check src tests && uv run ruff format --check src tests
+uv run basedpyright src     # the same three checks CI runs
 uv run python examples/01_empty_guide.py
 uv run python examples/02_slab.py
 uv run python examples/03_ep_hunt.py
@@ -148,6 +150,7 @@ Full docs (absolute links so they work from PyPI):
 | [Factorizations](https://github.com/dyed-eye/sceptre/blob/main/docs/factorizations.md) | li / direct / ASR / NVF / KFJ + the measured use-case matrix |
 | [Performance](https://github.com/dyed-eye/sceptre/blob/main/docs/performance.md) | BLAS threads, parallel sweeps, symmetry, N-ladders, memory |
 | [Comparisons](https://github.com/dyed-eye/sceptre/blob/main/docs/comparisons.md) | cross-solver/measurement protocol, pole-based resonance extraction |
+| [Inverse design](https://github.com/dyed-eye/sceptre/blob/main/docs/inverse-design.md) | graded ε via `Structure.from_segments`, low-N convergence of smooth maps |
 | [API](https://github.com/dyed-eye/sceptre/blob/main/docs/api.md) | every public symbol |
 
 Start at [docs/index.md](https://github.com/dyed-eye/sceptre/blob/main/docs/index.md).

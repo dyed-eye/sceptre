@@ -134,10 +134,12 @@ class CrossSection:
 
     @property
     def is_uniform(self) -> bool:
+        """True when every cell of the cross-section has the same eps."""
         return bool(np.all(self.eps_cells == self.eps_cells.flat[0]))
 
     @property
     def uniform_eps(self) -> complex:
+        """The single eps of a uniform cross-section (ValueError otherwise)."""
         if not self.is_uniform:
             raise ValueError("cross-section is not uniform")
         return complex(self.eps_cells.flat[0])
@@ -167,6 +169,7 @@ class Segment:
 
     @property
     def length(self) -> float:
+        """Segment length z2 - z1."""
         return self.z2 - self.z1
 
 
@@ -215,7 +218,7 @@ class Structure:
                 raise ValueError(
                     f"segment must have positive z-extent: [{seg.z1:g}, {seg.z2:g}]"
                 )
-        for prev, nxt in zip(segs[:-1], segs[1:]):
+        for prev, nxt in zip(segs[:-1], segs[1:], strict=True):
             # Tolerance tracks the shorter neighbour, never the distance from
             # the origin, with a floor for the round-off of the z values.
             tol = max(
@@ -274,7 +277,7 @@ class Structure:
         )
         stairs = {s: tuple(s.staircase(self.waveguide)) for s in self.shapes}
         segments = []
-        for z1, z2 in zip(breaks[:-1], breaks[1:]):
+        for z1, z2 in zip(breaks[:-1], breaks[1:], strict=True):
             z_mid = 0.5 * (z1 + z2)
             active = [b for b in self.boxes if b.z1 <= z_mid <= b.z2]
             active_shapes = tuple(s for s in self.shapes if s.z1 <= z_mid <= s.z2)

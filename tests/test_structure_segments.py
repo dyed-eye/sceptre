@@ -21,12 +21,14 @@ def _uniform(eps, n=4):
     return CrossSection(xe, ye, np.full((n, n), complex(eps)))
 
 
+@pytest.mark.unit
 def test_accepts_and_solves_a_single_segment():
     st = Structure.from_segments(Waveguide(A, B), [Segment(0.0, 0.01, _uniform(4.0))])
     res = Solver(st, M=4, N=4).smatrix(F)
     assert np.isfinite(res.smatrix.s11).all()
 
 
+@pytest.mark.unit
 def test_exposes_the_structure_contract_the_solver_reads():
     wg = Waveguide(A, B)
     st = Structure.from_segments(wg, [Segment(0.0, 0.01, _uniform(4.0))])
@@ -38,6 +40,7 @@ def test_exposes_the_structure_contract_the_solver_reads():
     assert len(st.segments()) == 1
 
 
+@pytest.mark.unit
 def test_segments_are_not_aliased_to_the_caller_list():
     segs = [Segment(0.0, 0.01, _uniform(4.0))]
     st = Structure.from_segments(Waveguide(A, B), segs)
@@ -45,6 +48,7 @@ def test_segments_are_not_aliased_to_the_caller_list():
     assert len(st.segments()) == 1
 
 
+@pytest.mark.unit
 def test_matches_an_equivalent_box_structure():
     """The whole point: same physics, different way of describing it."""
     boxes = [
@@ -64,16 +68,19 @@ def test_matches_an_equivalent_box_structure():
     assert got.smatrix.s21 == pytest.approx(ref.smatrix.s21, rel=1e-12, abs=1e-14)
 
 
+@pytest.mark.unit
 def test_rejects_empty_segment_list():
     with pytest.raises(ValueError, match="at least one segment"):
         Structure.from_segments(Waveguide(A, B), [])
 
 
+@pytest.mark.unit
 def test_rejects_non_positive_segment_length():
     with pytest.raises(ValueError, match="positive z-extent"):
         Structure.from_segments(Waveguide(A, B), [Segment(0.01, 0.01, _uniform(4.0))])
 
 
+@pytest.mark.unit
 def test_rejects_a_gap_between_segments():
     """Solver._cascade would silently omit the gap entirely."""
     with pytest.raises(ValueError, match="contiguous"):
@@ -86,6 +93,7 @@ def test_rejects_a_gap_between_segments():
         )
 
 
+@pytest.mark.unit
 def test_rejects_overlapping_segments():
     with pytest.raises(ValueError, match="contiguous"):
         Structure.from_segments(
@@ -97,6 +105,7 @@ def test_rejects_overlapping_segments():
         )
 
 
+@pytest.mark.unit
 def test_rejects_out_of_order_segments():
     with pytest.raises(ValueError, match="contiguous"):
         Structure.from_segments(
@@ -108,6 +117,7 @@ def test_rejects_out_of_order_segments():
         )
 
 
+@pytest.mark.unit
 def test_rejects_a_gap_on_a_structure_far_from_the_origin():
     """The join tolerance must scale with the segments, not with the distance
     from the origin: a 0.1 mm gap in a 10 mm structure is a real gap whether it
@@ -123,6 +133,7 @@ def test_rejects_a_gap_on_a_structure_far_from_the_origin():
         )
 
 
+@pytest.mark.unit
 def test_accepts_exact_joins_far_from_the_origin():
     """...but last-bit representation slack at large z must still be tolerated."""
     z0 = 1.0e6
@@ -137,6 +148,7 @@ def test_accepts_exact_joins_far_from_the_origin():
     assert len(st.segments()) == 2
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("bad", [np.inf, -np.inf, np.nan])
 def test_rejects_non_finite_segment_bounds(bad):
     """inf passes `z2 > z1`, then propagation_smatrix's overflow guard computes
@@ -145,6 +157,7 @@ def test_rejects_non_finite_segment_bounds(bad):
         Structure.from_segments(Waveguide(A, B), [Segment(0.0, bad, _uniform(4.0))])
 
 
+@pytest.mark.unit
 def test_rejects_zero_background():
     with pytest.raises(ValueError, match="nonzero"):
         Structure.from_segments(
@@ -152,6 +165,7 @@ def test_rejects_zero_background():
         )
 
 
+@pytest.mark.unit
 def test_tolerates_floating_point_joins():
     """Segment boundaries built by accumulation must not be rejected."""
     z = [i * 0.001 for i in range(4)]
@@ -160,6 +174,7 @@ def test_tolerates_floating_point_joins():
     assert len(st.segments()) == 3
 
 
+@pytest.mark.unit
 def test_works_with_x_symmetry_and_still_validates_the_map():
     sym = Structure.from_segments(Waveguide(A, B), [Segment(0.0, 0.01, _uniform(4.0))])
     assert Solver(sym, M=4, N=4, symmetry="x") is not None
@@ -175,6 +190,7 @@ def test_works_with_x_symmetry_and_still_validates_the_map():
         Solver(asym, M=4, N=4, symmetry="x")
 
 
+@pytest.mark.unit
 def test_works_with_asr():
     """build_maps reads only .waveguide and .segments(), so ASR composes -- but
     nothing proved it until now."""
@@ -185,6 +201,7 @@ def test_works_with_asr():
     assert np.isfinite(res.smatrix.s11).all()
 
 
+@pytest.mark.unit
 def test_tensor_factorizations_are_rejected_with_the_shape_message():
     st = Structure.from_segments(Waveguide(A, B), [Segment(0.0, 0.01, _uniform(4.0))])
     with pytest.raises(ValueError, match="Shape geometry"):

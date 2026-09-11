@@ -35,17 +35,21 @@ class Space:
 
     @property
     def n_count(self) -> int:
+        """Number of n (y-direction) orders."""
         return self.n1 - self.n0 + 1
 
     @property
     def m_count(self) -> int:
+        """Number of m (x-direction) orders."""
         return self.m1 - self.m0 + 1
 
     @property
     def size(self) -> int:
+        """Number of basis functions (m_count * n_count)."""
         return self.m_count * self.n_count
 
     def index(self, m: int, n: int) -> int:
+        """Flat index of the (m, n) basis function."""
         return (m - self.m0) * self.n_count + (n - self.n0)
 
     def mn(self) -> tuple[np.ndarray, np.ndarray]:

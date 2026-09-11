@@ -31,7 +31,8 @@ class Shape:
 
     Treat instances as immutable once handed to a Structure: Solver captures
     staircases at construction and caches operators per shape identity —
-    mutating attributes afterwards silently serves stale geometry."""
+    mutating attributes afterwards silently serves stale geometry.
+    """
 
     def __init__(self, z1: float, z2: float, eps: complex, k: int = _DEFAULT_K):
         if not z1 < z2:
@@ -56,9 +57,11 @@ class Shape:
 
     @property
     def scale(self) -> float:
-        """Characteristic in-plane half-size; NVF window defaults/validation
-        scale with it (window must stay below it to avoid the level-set
-        medial-axis / center singularity of the normal field)."""
+        """Characteristic in-plane half-size.
+
+        NVF window defaults/validation scale with it (window must stay below it to
+        avoid the level-set medial-axis / center singularity of the normal field).
+        """
         x1, x2, y1, y2 = self.bbox
         return 0.5 * min(x2 - x1, y2 - y1)
 
@@ -116,7 +119,7 @@ class Shape:
         y_lo, y_hi = max(by1, 0.0), min(by2, waveguide.b)
         boxes = []
         xs = np.linspace(bx1, bx2, k + 1)
-        for x1, x2 in zip(xs[:-1], xs[1:]):
+        for x1, x2 in zip(xs[:-1], xs[1:], strict=True):
             xm = 0.5 * (x1 + x2)
             interval = self._y_interval(xm, y_lo, y_hi)
             if interval is None:
@@ -150,17 +153,21 @@ class Cylinder(Shape):
         self.r = float(r)
 
     def level_set(self, x: np.ndarray, y: np.ndarray) -> np.ndarray:
+        """Signed distance to the circle (negative inside)."""
         return np.hypot(np.asarray(x) - self.cx, np.asarray(y) - self.cy) - self.r
 
     @property
     def bbox(self) -> tuple[float, float, float, float]:
+        """(x1, x2, y1, y2) bounding box."""
         return (self.cx - self.r, self.cx + self.r, self.cy - self.r, self.cy + self.r)
 
     @property
     def scale(self) -> float:
+        """Radius."""
         return self.r
 
     def normal(self, x: np.ndarray, y: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+        """Outward unit normal (nx, ny) of the level set at (x, y)."""
         dx = np.asarray(x, dtype=float) - self.cx
         dy = np.asarray(y, dtype=float) - self.cy
         rho = np.hypot(dx, dy)
@@ -172,7 +179,7 @@ class Cylinder(Shape):
         k = self.k if k is None else k
         boxes = []
         xs = np.linspace(-self.r, self.r, k + 1)
-        for x1, x2 in zip(xs[:-1], xs[1:]):
+        for x1, x2 in zip(xs[:-1], xs[1:], strict=True):
             xm = 0.5 * (x1 + x2)
             half = self.r * self.r - xm * xm
             if half <= 0:

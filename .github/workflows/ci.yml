@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: uv sync --group dev
+      - run: uv run ruff check src tests examples scripts
+      - run: uv run ruff format --check src tests examples scripts
+      - run: uv run basedpyright src
+      - run: uv run pytest -q -m unit
+
+  physics:
+    # Full suite incl. the integration tier (eigenproblems, contour searches,
+    # the ~10 min NVF golden test). Push-to-main only: too slow for every PR.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --group dev
+      - run: uv run pytest -q

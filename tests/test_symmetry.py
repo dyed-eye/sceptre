@@ -37,6 +37,7 @@ def solvers():
     )
 
 
+@pytest.mark.unit
 def test_x_sectors_partition_every_space():
     basis = ModeBasis(A, B, 5, 4)
     odd, even = x_sectors(basis)
@@ -48,6 +49,7 @@ def test_x_sectors_partition_every_space():
     assert np.array_equal(np.sort(both_t), np.arange(basis.size_t))
 
 
+@pytest.mark.unit
 def test_lead_columns_match_sector_row_counts():
     basis = ModeBasis(A, B, 5, 4)
     from sceptre.modes import lead_modes
@@ -58,6 +60,7 @@ def test_lead_columns_match_sector_row_counts():
         assert len(cols) == len(sec.t)
 
 
+@pytest.mark.unit
 def test_te10_and_te01_in_opposite_sectors():
     basis = ModeBasis(A, B, 4, 4)
     from sceptre.modes import lead_modes
@@ -70,6 +73,7 @@ def test_te10_and_te01_in_opposite_sectors():
     assert i01 in lead_columns(lead.labels, even)
 
 
+@pytest.mark.unit
 def test_sectored_matches_full_smatrix(solvers):
     plain, sectored = solvers
     s_full = plain.smatrix(F0).smatrix.full()
@@ -78,6 +82,7 @@ def test_sectored_matches_full_smatrix(solvers):
     assert np.max(np.abs(s_full - s_sect)) < 1e-9 * scale
 
 
+@pytest.mark.unit
 def test_sectored_matches_full_direct_factorization():
     struct = symmetric_structure()
     s_full = Solver(struct, M=5, N=5, factorization="direct").smatrix(F0)
@@ -86,6 +91,7 @@ def test_sectored_matches_full_direct_factorization():
     assert np.max(np.abs(a - b)) < 1e-9 * np.max(np.abs(a))
 
 
+@pytest.mark.unit
 def test_sectored_unitary_on_propagating_block(solvers):
     _, sectored = solvers
     sp = sectored.smatrix(F0).port_smatrix()
@@ -93,6 +99,7 @@ def test_sectored_unitary_on_propagating_block(solvers):
     assert np.max(np.abs(gram - np.eye(sp.shape[0]))) < 1e-10
 
 
+@pytest.mark.unit
 def test_sectored_complex_frequency_matches(solvers):
     plain, sectored = solvers
     fc = F0 + 2.0e8j
@@ -102,6 +109,7 @@ def test_sectored_complex_frequency_matches(solvers):
     assert abs(d_full - d_sect) < 1e-8 * abs(d_full)
 
 
+@pytest.mark.unit
 def test_asymmetric_structure_raises():
     offcenter = Box(0.1 * A, 0.5 * A, 0.0, 0.5 * B, 0.0, 0.004, 4.0)
     struct = Structure(Waveguide(A, B), [offcenter])
@@ -109,18 +117,21 @@ def test_asymmetric_structure_raises():
         Solver(struct, M=4, N=4, symmetry="x")
 
 
+@pytest.mark.unit
 def test_symmetry_with_asr_raises():
     struct = symmetric_structure()
     with pytest.raises(ValueError, match="ASR"):
         Solver(struct, M=4, N=4, symmetry="x", asr=AsrConfig())
 
 
+@pytest.mark.unit
 def test_unknown_symmetry_raises():
     struct = symmetric_structure()
     with pytest.raises(ValueError, match="symmetry"):
         Solver(struct, M=4, N=4, symmetry="y")
 
 
+@pytest.mark.unit
 def test_nearly_symmetric_eps_rejected():
     """A 1e-6-relative eps asymmetry must raise, not silently sector-project."""
     left = Box(0.2 * A, 0.5 * A, 0.0, 0.5 * B, 0.0, 0.004, 4.0)
@@ -130,6 +141,7 @@ def test_nearly_symmetric_eps_rejected():
         Solver(struct, M=4, N=4, symmetry="x")
 
 
+@pytest.mark.unit
 def test_sectored_m1_empty_z_sector_matches():
     """M=1 leaves one parity class with an empty Z-space (0x0 inv path)."""
     centered = Box(0.25 * A, 0.75 * A, 0.0, 0.6 * B, 0.0, 0.004, 4.0)
@@ -139,6 +151,7 @@ def test_sectored_m1_empty_z_sector_matches():
     assert np.max(np.abs(s_full - s_sect)) < 1e-9 * np.max(np.abs(s_full))
 
 
+@pytest.mark.unit
 def test_sectored_build_fg_slices_exy_blocks():
     """A mirror-commuting exy couples only equal m-parity classes; the sectored
     G must equal the full G restricted to the sector, cross blocks zero."""
@@ -168,6 +181,7 @@ def test_sectored_build_fg_slices_exy_blocks():
     assert np.max(np.abs(cross)) < 1e-13 * np.max(np.abs(G))
 
 
+@pytest.mark.unit
 def test_require_x_symmetric_accepts_staircase_roundoff():
     """Mirrored staircase edges built by linspace differ by ulps, not physics."""
     xs = np.linspace(-0.3 * A, 0.3 * A, 9) + 0.5 * A

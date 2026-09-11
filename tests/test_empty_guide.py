@@ -6,6 +6,7 @@
 """
 
 import numpy as np
+import pytest
 
 from sceptre.basis import ModeBasis
 from sceptre.fourier import EpsOperators
@@ -30,6 +31,7 @@ def _analytic_beta_squared(basis: ModeBasis, k0: float, eps: float = 1.0) -> np.
     return np.sort(np.asarray(vals))
 
 
+@pytest.mark.unit
 def test_empty_guide_dispersion_machine_precision():
     """eig(FG) eigenvalues = -beta^2 must equal the analytic dispersion set."""
     import scipy.linalg as sla
@@ -49,6 +51,7 @@ def test_empty_guide_dispersion_machine_precision():
     assert np.allclose(beta2_num, beta2_ref, rtol=0, atol=1e-12 * k0**2)
 
 
+@pytest.mark.unit
 def test_empty_guide_smatrix_is_pure_phase():
     L = 0.0173
     wg = Waveguide(A, B)

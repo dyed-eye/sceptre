@@ -69,6 +69,7 @@ def ep():
     return result
 
 
+@pytest.mark.integration
 def test_ep_is_physical(ep):
     t_b, eps_im = ep.p
     assert 0.5 * T_A < t_b < 2.0 * T_A  # geometry stayed in a sane range
@@ -76,6 +77,7 @@ def test_ep_is_physical(ep):
     assert ep.omega.imag < 0.0  # decaying resonance (e^{-i omega t} convention)
 
 
+@pytest.mark.integration
 def test_pole_pair_coalesces_at_ep(ep):
     """Approaching the EP along the loss axis, the splitting collapses."""
     t_b, eps_im = ep.p
@@ -90,6 +92,7 @@ def test_pole_pair_coalesces_at_ep(ep):
     assert split_near < 0.35 * split_far
 
 
+@pytest.mark.integration
 def test_puiseux_square_root_splitting(ep):
     """|omega_+ - omega_-| ~ t^(1/2) along a generic parameter-space direction."""
     t_b, eps_im = ep.p

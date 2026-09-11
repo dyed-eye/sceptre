@@ -20,12 +20,14 @@ def _edges(n=8):
     return np.linspace(0.0, A, n + 1), np.linspace(0.0, B, n + 1)
 
 
+@pytest.mark.unit
 def test_cross_section_rejects_eps_cells_shape_mismatch():
     xe, ye = _edges()
     with pytest.raises(ValueError, match="eps_cells"):
         CrossSection(xe, ye, np.full((7, 8), 4.0 + 0j))
 
 
+@pytest.mark.unit
 def test_cross_section_rejects_non_increasing_edges():
     xe, ye = _edges()
     bad = xe.copy()
@@ -34,6 +36,7 @@ def test_cross_section_rejects_non_increasing_edges():
         CrossSection(bad, ye, np.full((8, 8), 4.0 + 0j))
 
 
+@pytest.mark.unit
 def test_cross_section_rejects_zero_permittivity():
     """Structure.background and Shape.eps both reject zero; a cell must too."""
     xe, ye = _edges()
@@ -43,6 +46,7 @@ def test_cross_section_rejects_zero_permittivity():
         CrossSection(xe, ye, eps)
 
 
+@pytest.mark.unit
 def test_cross_section_normalises_real_eps_to_complex():
     xe, ye = _edges()
     cs = CrossSection(xe, ye, np.full((8, 8), 4.0))
@@ -50,6 +54,7 @@ def test_cross_section_normalises_real_eps_to_complex():
     assert cs.uniform_eps == 4.0 + 0j
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("bad", [np.nan, np.inf, -np.inf])
 def test_cross_section_rejects_non_finite_permittivity(bad):
     """NaN compares False against everything, so it passed the ordering and
@@ -62,6 +67,7 @@ def test_cross_section_rejects_non_finite_permittivity(bad):
         CrossSection(xe, ye, eps)
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("bad", [np.nan, np.inf])
 def test_cross_section_rejects_non_finite_edges(bad):
     xe, ye = _edges()
@@ -75,6 +81,7 @@ def test_cross_section_rejects_non_finite_edges(bad):
         CrossSection(xe, broken, np.full((8, 8), 4.0 + 0j))
 
 
+@pytest.mark.unit
 def test_cross_section_rejects_complex_edges():
     """numpy would only raise a default-suppressed ComplexWarning and drop the
     imaginary part."""
@@ -83,6 +90,7 @@ def test_cross_section_rejects_complex_edges():
         CrossSection(xe.astype(complex), ye, np.full((8, 8), 4.0 + 0j))
 
 
+@pytest.mark.unit
 def test_cross_section_copies_its_inputs():
     """np.asarray returns the CALLER's array when the dtype already matches, so
     a validated layout could be corrupted afterwards by ordinary in-place
@@ -98,6 +106,7 @@ def test_cross_section_copies_its_inputs():
     assert cs.key() == key_before
 
 
+@pytest.mark.unit
 def test_cross_section_arrays_are_read_only():
     xe, ye = _edges()
     cs = CrossSection(xe, ye, np.full((8, 8), 4.0 + 0j))
@@ -107,6 +116,7 @@ def test_cross_section_arrays_are_read_only():
         cs.x_edges[0] = -1.0
 
 
+@pytest.mark.unit
 def test_error_messages_localise_the_offending_entry():
     """A 96x96 optimiser-searched grid is not diffable by hand."""
     xe, ye = _edges()
@@ -116,6 +126,7 @@ def test_error_messages_localise_the_offending_entry():
         CrossSection(xe, ye, eps)
 
 
+@pytest.mark.unit
 def test_box_structure_with_non_finite_eps_is_caught_by_the_same_funnel():
     """Structure._layout routes every box through CrossSection, so the box path
     inherits the finiteness guarantee without a second check."""
@@ -125,6 +136,7 @@ def test_box_structure_with_non_finite_eps_is_caught_by_the_same_funnel():
         Structure(Waveguide(A, B), [Box(0, A, 0, B, 0.0, 0.01, np.inf)]).segments()
 
 
+@pytest.mark.unit
 def test_cross_section_accepts_a_valid_graded_map():
     xe, ye = _edges(16)
     xm = 0.5 * (xe[:-1] + xe[1:])
@@ -138,6 +150,7 @@ def test_cross_section_accepts_a_valid_graded_map():
     assert not cs.is_uniform
 
 
+@pytest.mark.unit
 def test_solver_rejects_cross_section_not_spanning_the_guide():
     """A map covering half the guide silently left the rest undefined."""
     xe = np.linspace(0.0, A / 2, 9)
@@ -148,6 +161,7 @@ def test_solver_rejects_cross_section_not_spanning_the_guide():
         Solver(struct, M=4, N=4)
 
 
+@pytest.mark.unit
 def test_solver_rejects_cross_section_not_starting_at_the_wall():
     xe = np.linspace(0.001, A + 0.001, 9)
     ye = np.linspace(0.0, B, 9)
@@ -157,6 +171,7 @@ def test_solver_rejects_cross_section_not_starting_at_the_wall():
         Solver(struct, M=4, N=4)
 
 
+@pytest.mark.unit
 def test_solver_rejects_cross_section_not_spanning_the_guide_in_y():
     """Mirror of the x cases: the y branches of the span check were untested,
     so an x/y or a/b typo in them would not have been caught."""
@@ -168,6 +183,7 @@ def test_solver_rejects_cross_section_not_spanning_the_guide_in_y():
         Solver(struct, M=4, N=4)
 
 
+@pytest.mark.unit
 def test_solver_rejects_cross_section_not_starting_at_the_wall_in_y():
     xe = np.linspace(0.0, A, 9)
     ye = np.linspace(0.001, B + 0.001, 9)
@@ -177,6 +193,7 @@ def test_solver_rejects_cross_section_not_starting_at_the_wall_in_y():
         Solver(struct, M=4, N=4)
 
 
+@pytest.mark.unit
 def test_solver_accepts_a_spanning_graded_structure():
     xe, ye = _edges(16)
     cs = CrossSection(xe, ye, np.full((16, 16), 4.0 + 0j))
@@ -185,6 +202,7 @@ def test_solver_accepts_a_spanning_graded_structure():
     assert np.isfinite(res.smatrix.s11).all()
 
 
+@pytest.mark.unit
 def test_box_structures_still_build():
     """The internal path seeds [0, a] x [0, b], so it must be unaffected."""
     from sceptre.geometry import Box

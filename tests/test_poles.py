@@ -6,6 +6,7 @@ location must be recovered to 1e-12.
 """
 
 import numpy as np
+import pytest
 
 from sceptre.poles import find_zeros_poles, refine_pole, refine_zero
 
@@ -25,12 +26,14 @@ def _match(found, expected, tol):
         assert min(abs(w - v) for v in found) < tol, (w, found)
 
 
+@pytest.mark.unit
 def test_manufactured_rational_recovered_to_1e12():
     res = find_zeros_poles(_rational, 0.0 + 0.0j, 1.0, 1.0, rel_tol=1e-13)
     _match(res.zeros, ZEROS, 1e-12)
     _match(res.poles, POLES, 1e-12)
 
 
+@pytest.mark.unit
 def test_close_pole_pair_resolved():
     """Two poles separated by 1e-4 (the EP-tracking workload)."""
     p1, p2 = 0.4 + 0.1j, 0.4 + 0.1j + 1.2e-4 * np.exp(0.7j)
@@ -43,6 +46,7 @@ def test_close_pole_pair_resolved():
     assert res.zeros == []
 
 
+@pytest.mark.unit
 def test_hidden_zero_pole_pair_not_lost():
     """A region whose total winding is zero (one zero + one pole) must not come back
     empty -- the first-moment test forces subdivision until they separate."""
@@ -56,6 +60,7 @@ def test_hidden_zero_pole_pair_not_lost():
     _match(res.poles, [p0], 1e-12)
 
 
+@pytest.mark.unit
 def test_newton_refiners():
     z = refine_zero(_rational, ZEROS[0] + 0.01 - 0.02j, tol=1e-14)
     assert abs(z - ZEROS[0]) < 1e-13
@@ -63,6 +68,7 @@ def test_newton_refiners():
     assert abs(p - POLES[2]) < 1e-13
 
 
+@pytest.mark.unit
 def test_scaled_domain_like_frequencies():
     """Same recovery on a physically-scaled domain (poles ~ 1e10, like f in Hz)."""
     scale = 1e10

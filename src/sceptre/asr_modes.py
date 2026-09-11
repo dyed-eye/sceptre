@@ -59,7 +59,7 @@ def _projection(
     m_phys = np.arange(m_lo, mmax + 1)
     size = len(m_phys)
     out = np.zeros((size, size))
-    for u1, u2 in zip(amap.breaks[:-1], amap.breaks[1:]):
+    for u1, u2 in zip(amap.breaks[:-1], amap.breaks[1:], strict=True):
         nq = int(3.2 * mmax * (u2 - u1) / length) + 24
         nodes, weights = np.polynomial.legendre.leggauss(nq)
         u = 0.5 * (u2 - u1) * nodes + 0.5 * (u1 + u2)
@@ -81,6 +81,7 @@ def _projection(
 
 
 def lead_patterns(basis: ModeBasis, xmap: AsrMap1D, ymap: AsrMap1D) -> LeadPatterns:
+    """Build the lead-mode projection patterns in the mapped (u, v) coordinates."""
     a, b = basis.a, basis.b
     # E~_u patterns: cos-type in u WITH the X' metric, sin-type in v without;
     # E~_v patterns: sin-type in u without, cos-type in v WITH the Y' metric.
@@ -167,9 +168,9 @@ def asr_lead_modes(
         # Flux Gram-Schmidt in the symmetric form B(w1, w2) = w1^T G w2 / (i beta):
         # G = G^T makes B symmetric, so one-sided orthogonalization suffices.
         done: list[tuple[np.ndarray, np.ndarray, complex]] = []
-        for ai, w in zip(members, aligned):
+        for ai, w in zip(members, aligned, strict=True):
             gw = G @ w
-            for w_prev, gw_prev, b_prev in done:
+            for w_prev, _gw_prev, b_prev in done:
                 w = w - w_prev * (w_prev @ gw) / b_prev
                 gw = G @ w
             flux = (w @ gw) / (1j * beta_c)

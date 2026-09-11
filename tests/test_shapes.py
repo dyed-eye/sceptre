@@ -22,7 +22,7 @@ def disk_boxes_reference(r, h, eps, k, cx=CX, cy=CY):
     """The campaign recipe (reports/comsol_parity/runs/parity_common.py)."""
     boxes = []
     xs = np.linspace(-r, r, k + 1)
-    for x1, x2 in zip(xs[:-1], xs[1:]):
+    for x1, x2 in zip(xs[:-1], xs[1:], strict=True):
         xm = 0.5 * (x1 + x2)
         half = r * r - xm * xm
         if half <= 0:
@@ -42,7 +42,7 @@ def test_cylinder_staircase_matches_disk_boxes():
     got = cyl.staircase(WG, 32)
     ref = disk_boxes_reference(R, H, EPS, 32)
     assert len(got) == len(ref)
-    for g, r_ in zip(got, ref):
+    for g, r_ in zip(got, ref, strict=True):
         for attr in ("x1", "x2", "y1", "y2", "z1", "z2", "eps"):
             assert getattr(g, attr) == pytest.approx(getattr(r_, attr), abs=1e-15)
 
@@ -76,7 +76,7 @@ def test_generic_level_set_staircase_agrees_with_exact():
     got = GenericCircle().staircase(WG, 16)
     ref = Cylinder(CX, CY, R, 0.0, H, EPS).staircase(WG, 16)
     assert len(got) == len(ref)
-    for g, r_ in zip(got, ref):
+    for g, r_ in zip(got, ref, strict=True):
         assert g.y1 == pytest.approx(r_.y1, abs=1e-9 * A_WG)
         assert g.y2 == pytest.approx(r_.y2, abs=1e-9 * A_WG)
 

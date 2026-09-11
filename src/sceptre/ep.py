@@ -39,6 +39,8 @@ from .poles import find_zeros_poles
 
 @dataclass(frozen=True)
 class EPResult:
+    """Result of an exceptional-point search."""
+
     p: tuple[float, float]  # (p1, p2) at the EP
     omega: complex  # degenerate pole position (saddle omega_c at the final p)
     converged: bool
@@ -134,7 +136,7 @@ def find_ep(
             "inner saddle iteration failed at the starting point; "
             "provide a closer (p0, omega0)"
         )
-    for it in range(1, max_iter + 1):
+    for it in range(1, max_iter + 1):  # noqa: B007  (it is reported after the loop)
         if split < tol_split:
             converged = True
             break
@@ -191,7 +193,7 @@ def pole_pair(
     rel_tol: float = 1e-12,
     **finder_kwargs,
 ) -> tuple[complex, complex]:
-    """The two poles of f inside a box around `center` (for Puiseux scans).
+    """Return the two poles of f inside a box around `center` (for Puiseux scans).
 
     f is det S (poles of f are the resonances).  Raises if not exactly two poles
     are resolved -- callers should choose the box so it isolates the pair.
@@ -211,6 +213,8 @@ def pole_pair(
 
 @dataclass(frozen=True)
 class PuiseuxFit:
+    """Puiseux (square-root splitting) fit around an exceptional point."""
+
     exponent: float  # fitted slope of log|split| vs log t  (0.5 at a clean EP)
     coefficient: complex  # |c| in omega_pm = omega_EP +- c sqrt(t)
     t_values: np.ndarray

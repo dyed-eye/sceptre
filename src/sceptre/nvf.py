@@ -50,10 +50,13 @@ _W_EPS = 1e-6  # window support threshold for quadrature and overlap checks
 
 @dataclass(frozen=True)
 class NvfConfig:
-    """NVF knobs.  window: absolute half-width [m] of the boundary window
+    """NVF knobs.
+
+    window: absolute half-width [m] of the boundary window
     (None = WINDOW_FRACTION * shape.scale per shape; math.inf = w == 1, the
     Li-limit/testing mode).  quad_cells: quadrature strips across a shape's
-    window region for the smooth projection fields."""
+    window region for the smooth projection fields.
+    """
 
     window: float | None = None
     quad_cells: int = 192
@@ -74,7 +77,8 @@ def _galerkin(
 ) -> np.ndarray:
     """Galerkin matrix of a cell-wise-constant function in one component space.
 
-    Strip-factored: one kron per x-interval (y-cells summed first)."""
+    Strip-factored: one kron per x-interval (y-cells summed first).
+    """
     M, N = basis.M, basis.N
     a, b = basis.a, basis.b
     if kind == "XX":

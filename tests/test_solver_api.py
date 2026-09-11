@@ -17,6 +17,7 @@ def _dimer_solver():
     return Solver(Structure(Waveguide(A, B), boxes), M=1, N=1)
 
 
+@pytest.mark.unit
 def test_det_port_s_default_indices_work_at_complex_freq():
     """Without explicit indices, the port set must come from Re(freq) -- never from
     the complex frequency itself, where the propagating test is empty and det of a
@@ -29,6 +30,7 @@ def test_det_port_s_default_indices_work_at_complex_freq():
     assert abs(d_default - 1.0) > 1e-3  # genuinely frequency-dependent
 
 
+@pytest.mark.unit
 def test_det_port_s_raises_below_cutoff():
     solver = _dimer_solver()
     with pytest.raises(ValueError, match="no propagating"):

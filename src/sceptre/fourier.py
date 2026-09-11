@@ -45,7 +45,8 @@ try:  # Numba accelerates the overlap-matrix assembly loops.  numba is a declare
     from numba import njit
 except ImportError:  # pragma: no cover
 
-    def njit(*args, **kwargs):
+    def njit(*args, **_kwargs):
+        """No-op stand-in for numba.njit when numba is unavailable."""
         if args and callable(args[0]):
             return args[0]
         return lambda f: f
@@ -136,14 +137,17 @@ def _cos_sin_overlap_fill(Mmax: int, a: float, x1: float, x2: float) -> np.ndarr
 
 
 def sin_overlap(Mmax: int, a: float, x1: float, x2: float) -> np.ndarray:
+    """Gram matrix of sin(m pi x / a), m = 1..Mmax, over [x1, x2]."""
     return _sin_overlap_fill(Mmax, a, float(x1), float(x2))
 
 
 def cos_overlap(Mmax: int, a: float, x1: float, x2: float) -> np.ndarray:
+    """Gram matrix of cos(m pi x / a), m = 0..Mmax, over [x1, x2]."""
     return _cos_overlap_fill(Mmax, a, float(x1), float(x2))
 
 
 def cs_overlap(Mmax: int, a: float, x1: float, x2: float) -> np.ndarray:
+    """Cross Gram matrix cos(m pi x / a) x sin(m' pi x / a) over [x1, x2]."""
     return _cos_sin_overlap_fill(Mmax, a, float(x1), float(x2))
 
 
@@ -177,6 +181,7 @@ class EpsOperators:
 def build_eps_operators(
     layout: CrossSection, basis: ModeBasis, factorization: str = "li"
 ) -> EpsOperators:
+    """Assemble the eps operators of a slice in the mode basis (Li or direct rule)."""
     if factorization not in ("li", "direct"):
         raise ValueError(f"unknown factorization {factorization!r}")
 

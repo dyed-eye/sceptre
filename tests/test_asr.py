@@ -15,7 +15,7 @@ import warnings
 import numpy as np
 import pytest
 
-from sceptre import AsrConfig, Box, Structure, Solver, Waveguide
+from sceptre import AsrConfig, Box, Solver, Structure, Waveguide
 from sceptre.asr import AsrMap1D, build_maps, gauss_gram
 from sceptre.fourier import cos_overlap, sin_overlap
 from sceptre.solver import C0
@@ -70,6 +70,7 @@ def test_gauss_gram_matches_analytic_overlaps():
 # ------------------------------------------------------------- exactness
 
 
+@pytest.mark.unit
 def test_identity_eta_reproduces_plain_solver():
     struct = _block_structure(9.0)
     plain = _s21(struct, 10)
@@ -77,6 +78,7 @@ def test_identity_eta_reproduces_plain_solver():
     assert abs(plain - ident) < 1e-10
 
 
+@pytest.mark.unit
 def test_asr_lead_matches_analytic_dispersion():
     struct = _block_structure(9.0)
     solver = Solver(struct, M=1, N=16, asr=AsrConfig())
@@ -89,6 +91,7 @@ def test_asr_lead_matches_analytic_dispersion():
     assert np.max(np.abs(gram - np.eye(len(gram)))) < 1e-9
 
 
+@pytest.mark.unit
 def test_asr_slab_multimode_vs_analytic():
     """Full-width slab at 18 GHz: degenerate TE11/TM11 pairs propagate, so this
     exercises the cluster alignment; S21 must match the analytic two-interface
@@ -123,6 +126,7 @@ def ceramic():
     return struct, ref
 
 
+@pytest.mark.integration
 def test_asr_beats_plain_li_at_high_contrast(ceramic):
     struct, ref = ceramic
     err_plain_56 = abs(_s21(struct, 56) - ref)
@@ -132,6 +136,7 @@ def test_asr_beats_plain_li_at_high_contrast(ceramic):
     assert err_asr_40 < err_plain_56 / 5.0
 
 
+@pytest.mark.unit
 def test_asr_structural_identities_high_contrast(ceramic):
     """Unitarity and reciprocity must survive the metric operators."""
     struct, _ = ceramic
@@ -195,7 +200,7 @@ def _staircase_disk(
     boxes = []
     cy = a / 2 + cy_off
     xs = np.linspace(-r, r, k + 1)
-    for x1, x2 in zip(xs[:-1], xs[1:]):
+    for x1, x2 in zip(xs[:-1], xs[1:], strict=True):
         half = r * r - (0.5 * (x1 + x2)) ** 2
         if half <= 0:
             continue
@@ -252,6 +257,7 @@ def test_build_maps_thins_and_warns_on_staircase():
     assert np.any(np.isclose(ymap_block.breaks, EDGE, rtol=1e-12))
 
 
+@pytest.mark.integration
 def test_asr_staircase_disk_stays_unitary():
     """Regression: eps=80 staircased wall-touching disk, the exact config that
     produced port-column energies of 2.5-3.5 at 5.700 GHz before edge thinning."""

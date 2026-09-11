@@ -12,7 +12,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from sceptre import Box, Structure, Solver, Waveguide
+from sceptre import Box, Solver, Structure, Waveguide
 from sceptre.solver import C0
 
 A, B = 0.02286, 0.01016  # WR-90

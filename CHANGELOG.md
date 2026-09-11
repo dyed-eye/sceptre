@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Tooling: `ruff` (lint + format, numpy docstring convention) and `basedpyright`
+  configured in `pyproject.toml`; GitHub Actions CI runs lint, format check,
+  type check and the `unit` test tier on Linux/Windows × Python 3.11/3.13.
+- Every public class/function now carries a docstring; `zip()` calls are
+  `strict=True`; closures inside loops bind their loop variables explicitly.
+- Test files carry `unit` / `integration` markers throughout, so
+  `pytest -m unit` is the fast tier.
+- Research campaign scripts moved out of `scripts/` (local `research/`,
+  untracked); `scripts/` keeps only the COMSOL validation drivers.
+
 ## 0.2.0 — 2026-08-22
 
 ### Added

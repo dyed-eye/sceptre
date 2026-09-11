@@ -24,8 +24,8 @@ from .basis import ModeBasis
 from .fourier import EpsOperators, build_eps_operators
 from .geometry import CrossSection, Segment, Structure, Waveguide
 from .kfj import KfjConfig, build_kfj_operators
-from .nvf import NvfConfig, build_nvf_operators
 from .modes import LeadModes, lead_modes
+from .nvf import NvfConfig, build_nvf_operators
 from .slicesolver import solve_slice
 from .smatrix import SMatrix, cascade, interface_smatrix, propagation_smatrix
 from .symmetry import Sector, lead_columns, require_x_symmetric, x_sectors
@@ -53,7 +53,8 @@ def _require_spanning_sections(
     Structure builds layouts seeded with [0, a] x [0, b], so this only bites on
     explicitly supplied grids (docs/inverse-design.md), where a map covering
     part of the guide otherwise leaves the remainder undefined and solves
-    silently against the wrong geometry."""
+    silently against the wrong geometry.
+    """
     a, b = waveguide.a, waveguide.b
     for seg in segments:
         cs = seg.cross_section
@@ -81,6 +82,7 @@ class SResult:
     lead: LeadModes
 
     def propagating_indices(self) -> np.ndarray:
+        """Return the indices of the propagating lead modes."""
         return np.flatnonzero(self.lead.propagating())
 
     def port_smatrix(self, indices: np.ndarray | None = None) -> np.ndarray:
@@ -262,9 +264,12 @@ class Solver:
         return self._ops_cache[key]
 
     def _ops_for(self, seg: Segment) -> EpsOperators | None:
-        """Per-segment operator dispatch.  Tensor factorizations route shape
+        """Per-segment operator dispatch.
+
+        Tensor factorizations route shape
         segments to their builders; shape-free segments in a shapes-only
-        structure are uniform background (analytic path, ops None)."""
+        structure are uniform background (analytic path, ops None).
+        """
         if self.factorization not in ("nvf", "kfj"):
             return self._segment_ops(seg.cross_section)
         if not seg.shapes:
@@ -320,7 +325,7 @@ class Solver:
             rc = np.ix_(sec.t, cols)
             s = self._cascade(lead, k0, sec, lead.W[rc], lead.V[rc])
             ix = np.ix_(cols, cols)
-            for dst, block in zip(merged, (s.s11, s.s12, s.s21, s.s22)):
+            for dst, block in zip(merged, (s.s11, s.s12, s.s21, s.s22), strict=True):
                 dst[ix] = block
         return SResult(freq, SMatrix(*merged), lead)
 
@@ -350,10 +355,11 @@ class Solver:
         return cascade(parts)
 
     def sweep(self, freqs: Sequence[complex] | np.ndarray) -> list[SResult]:
+        """Solve at every frequency in `freqs`."""
         return [self.smatrix(f) for f in np.asarray(freqs).ravel()]
 
     def det_port_s(self, freq: complex, indices: np.ndarray | None = None) -> complex:
-        """det of the port S-matrix -- the analytic function fed to the pole finder.
+        """Det of the port S-matrix -- the analytic function fed to the pole finder.
 
         indices: fixed lead-mode index set defining the ports.  For sweeps over a
         region, pass one index set determined at a real reference frequency so the

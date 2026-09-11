@@ -73,9 +73,15 @@ def rotated_bar_boxes(cx, cy, w, ell, theta_deg, z1, z2, eps, nstrip):
         if x2 - x1 <= 0:
             continue
         boxes.append(
-            Box(x1=x1 + A / 2, x2=x2 + A / 2,
-                y1=edges[i] + B / 2, y2=edges[i + 1] + B / 2,
-                z1=z1, z2=z2, eps=eps)
+            Box(
+                x1=x1 + A / 2,
+                x2=x2 + A / 2,
+                y1=edges[i] + B / 2,
+                y2=edges[i + 1] + B / 2,
+                z1=z1,
+                z2=z2,
+                eps=eps,
+            )
         )
     return boxes
 
@@ -89,13 +95,24 @@ def build(nstrip):
 
     # bar 1: rot 0 -> exact axis-aligned box
     bar1 = Box(
-        x1=rp_x1 - rp_w1 / 2 + A / 2, x2=rp_x1 + rp_w1 / 2 + A / 2,
-        y1=-rp_len / 2 + B / 2, y2=rp_len / 2 + B / 2,
-        z1=-rp_h1 / 2, z2=rp_h1 / 2, eps=EPS_ROD,
+        x1=rp_x1 - rp_w1 / 2 + A / 2,
+        x2=rp_x1 + rp_w1 / 2 + A / 2,
+        y1=-rp_len / 2 + B / 2,
+        y2=rp_len / 2 + B / 2,
+        z1=-rp_h1 / 2,
+        z2=rp_h1 / 2,
+        eps=EPS_ROD,
     )
     bars2 = rotated_bar_boxes(
-        rp_x2, 0.0, rp_w2, rp_len, twist,
-        dz - rp_h2 / 2, dz + rp_h2 / 2, EPS_ROD, nstrip,
+        rp_x2,
+        0.0,
+        rp_w2,
+        rp_len,
+        twist,
+        dz - rp_h2 / 2,
+        dz + rp_h2 / 2,
+        EPS_ROD,
+        nstrip,
     )
     return Structure(Waveguide(a=A, b=B), [bar1, *bars2])
 
@@ -105,10 +122,18 @@ def sceptre_block(struct, freq, M, N):
     solver = Solver(struct, M=M, N=N, factorization="li")
     res = solver.smatrix(freq)
     te10, te01 = ("TE", 1, 0), ("TE", 0, 1)
-    r = np.array([[res.coeff(1, te10, 1, te10), res.coeff(1, te10, 1, te01)],
-                  [res.coeff(1, te01, 1, te10), res.coeff(1, te01, 1, te01)]])
-    t = np.array([[res.coeff(2, te10, 1, te10), res.coeff(2, te10, 1, te01)],
-                  [res.coeff(2, te01, 1, te10), res.coeff(2, te01, 1, te01)]])
+    r = np.array(
+        [
+            [res.coeff(1, te10, 1, te10), res.coeff(1, te10, 1, te01)],
+            [res.coeff(1, te01, 1, te10), res.coeff(1, te01, 1, te01)],
+        ]
+    )
+    t = np.array(
+        [
+            [res.coeff(2, te10, 1, te10), res.coeff(2, te10, 1, te01)],
+            [res.coeff(2, te01, 1, te10), res.coeff(2, te01, 1, te01)],
+        ]
+    )
     return r, t
 
 
@@ -127,14 +152,20 @@ def main():
 
     fk, r_c, t_c = comsol_ref(mat, f_probe)
     print(f"reference file : {MAT.split(chr(92))[-1]}")
-    print(f"probe frequency: {fk/1e9:.4f} GHz   (staircase strips = {nstrip})")
-    print(f"COMSOL  |S11| {abs(r_c[0,0]):.4f}  |S21| {abs(r_c[1,0]):.4f}  "
-          f"|S31| {abs(t_c[0,0]):.4f}  |S41| {abs(t_c[1,0]):.4f}")
-    print(f"COMSOL  power sum for TE10 in: "
-          f"{abs(r_c[0,0])**2 + abs(r_c[1,0])**2 + abs(t_c[0,0])**2 + abs(t_c[1,0])**2:.4f}")
+    print(f"probe frequency: {fk / 1e9:.4f} GHz   (staircase strips = {nstrip})")
+    print(
+        f"COMSOL  |S11| {abs(r_c[0, 0]):.4f}  |S21| {abs(r_c[1, 0]):.4f}  "
+        f"|S31| {abs(t_c[0, 0]):.4f}  |S41| {abs(t_c[1, 0]):.4f}"
+    )
+    print(
+        f"COMSOL  power sum for TE10 in: "
+        f"{abs(r_c[0, 0]) ** 2 + abs(r_c[1, 0]) ** 2 + abs(t_c[0, 0]) ** 2 + abs(t_c[1, 0]) ** 2:.4f}"
+    )
     print()
-    print(f"{'M=N':>4} {'|S11|':>8} {'|S21|':>8} {'|S31|':>8} {'|S41|':>8} "
-          f"{'sum':>7} {'t/s':>7}")
+    print(
+        f"{'M=N':>4} {'|S11|':>8} {'|S21|':>8} {'|S31|':>8} {'|S41|':>8} "
+        f"{'sum':>7} {'t/s':>7}"
+    )
     struct = build(nstrip)
     for MN in (6, 8, 10, 12, 14):
         t0 = time.time()
@@ -144,10 +175,16 @@ def main():
             print(f"{MN:>4}  FAILED: {type(exc).__name__}: {exc}")
             continue
         dt = time.time() - t0
-        tot = (abs(r_s[0, 0]) ** 2 + abs(r_s[1, 0]) ** 2
-               + abs(t_s[0, 0]) ** 2 + abs(t_s[1, 0]) ** 2)
-        print(f"{MN:>4} {abs(r_s[0,0]):>8.4f} {abs(r_s[1,0]):>8.4f} "
-              f"{abs(t_s[0,0]):>8.4f} {abs(t_s[1,0]):>8.4f} {tot:>7.4f} {dt:>7.1f}")
+        tot = (
+            abs(r_s[0, 0]) ** 2
+            + abs(r_s[1, 0]) ** 2
+            + abs(t_s[0, 0]) ** 2
+            + abs(t_s[1, 0]) ** 2
+        )
+        print(
+            f"{MN:>4} {abs(r_s[0, 0]):>8.4f} {abs(r_s[1, 0]):>8.4f} "
+            f"{abs(t_s[0, 0]):>8.4f} {abs(t_s[1, 0]):>8.4f} {tot:>7.4f} {dt:>7.1f}"
+        )
 
 
 if __name__ == "__main__":

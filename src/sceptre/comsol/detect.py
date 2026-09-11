@@ -16,6 +16,8 @@ _STANDARD_ROOTS = [
 
 @dataclass(frozen=True)
 class ComsolInstall:
+    """A local COMSOL installation (paths to the launcher binaries)."""
+
     version: str  # e.g. "COMSOL61"
     root: Path  # .../COMSOL61/Multiphysics
     comsol_exe: Path

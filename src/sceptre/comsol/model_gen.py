@@ -144,6 +144,7 @@ def write_java(
     comsol_bin: str = r"C:\Program Files\COMSOL\COMSOL61\Multiphysics\bin\win64",
     case: bm.BenchmarkCase = bm.STANDARD,
 ) -> Path:
+    """Write the COMSOL Java model file for the benchmark case and return its path."""
     tol = 1e-6
     text = _TEMPLATE.format(
         a=bm.A,

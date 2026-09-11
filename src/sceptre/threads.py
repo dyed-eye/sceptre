@@ -17,8 +17,8 @@ vars, set before numpy imports in the worker) — is unaffected.
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Iterator
 
 from threadpoolctl import threadpool_limits
 

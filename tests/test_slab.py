@@ -45,6 +45,7 @@ def _solve_slab(eps2, f_hz):
     return solver.smatrix(f_hz)
 
 
+@pytest.mark.unit
 @pytest.mark.parametrize("eps2", [4.0 + 0.0j, 4.0 + 0.5j])
 def test_slab_vs_analytic_all_modes(eps2):
     f_hz = 18.0e9  # TE10, TE20, TE01, TE11, TM11 propagating in the empty lead
@@ -62,6 +63,7 @@ def test_slab_vs_analytic_all_modes(eps2):
         assert np.max(np.abs(off)) < 1e-12
 
 
+@pytest.mark.unit
 def test_slab_reciprocity_and_port_symmetry():
     res = _solve_slab(4.0 + 0.0j, 18.0e9)
     s = res.smatrix

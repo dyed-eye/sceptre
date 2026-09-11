@@ -49,12 +49,14 @@ def errors():
     return err, ref
 
 
+@pytest.mark.integration
 def test_li_converges_monotonically(errors):
     err, _ = errors
     li = err["li"]
     assert np.all(np.diff(li) < 0), f"Li errors not monotone: {li}"
 
 
+@pytest.mark.unit
 def test_li_markedly_faster_than_direct(errors):
     err, ref = errors
     li, direct = err["li"], err["direct"]
@@ -67,6 +69,7 @@ def test_li_markedly_faster_than_direct(errors):
     assert direct[-1] > direct[0] / 10.0
 
 
+@pytest.mark.unit
 def test_direct_rule_is_the_slow_one(errors):
     """The unfactorized error at the highest order is worse than Li at the LOWEST."""
     err, _ = errors
