@@ -14,6 +14,7 @@ S-matrix cascading and complex-frequency pole/zero location.
 | [inverse-design.md](inverse-design.md) | Graded (continuously varying) ε: `Structure.from_segments`, `CrossSection`, why smooth maps converge at low N, per-candidate cost |
 | [comparisons.md](comparisons.md) | Comparing against other solvers/measurements without fooling yourself; pole-based resonance extraction |
 | [api.md](api.md) | Every public symbol with signatures and examples |
+| [talk/](talk/) | Figure + build scripts for the seminar deck (the deck itself lives outside the repo) |
 
 ## Quickstart
 
